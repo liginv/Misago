@@ -6,55 +6,48 @@ from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 
 from misago.core import cachebuster
-
-
-__all__ = [
-    'BAN_USERNAME', 'BAN_EMAIL', 'BAN_IP', 'BANS_CHOICES',
-    'Ban', 'BanCache'
-]
-
-
-BAN_CACHEBUSTER = 'misago_bans'
-
-
-BAN_USERNAME = 0
-BAN_EMAIL = 1
-BAN_IP = 2
-
-
-BANS_CHOICES = (
-    (BAN_USERNAME, _('Username')),
-    (BAN_EMAIL, _('E-mail address')),
-    (BAN_IP, _('IP address')),
-)
+from misago.users.constants import BANS_CACHEBUSTER
 
 
 class BansManager(models.Manager):
-    def get_ip_ban(self, ip):
-        return self.get_ban(ip=ip)
+    def get_ip_ban(self, ip, registration_only=False):
+        return self.get_ban(
+            ip=ip,
+            registration_only=registration_only,
+        )
 
-    def get_username_ban(self, username):
-        return self.get_ban(username=username)
+    def get_username_ban(self, username, registration_only=False):
+        return self.get_ban(
+            username=username,
+            registration_only=registration_only,
+        )
 
-    def get_email_ban(self, email):
-        return self.get_ban(email=email)
+    def get_email_ban(self, email, registration_only=False):
+        return self.get_ban(
+            email=email,
+            registration_only=registration_only,
+        )
 
     def invalidate_cache(self):
-        cachebuster.invalidate(BAN_CACHEBUSTER)
+        cachebuster.invalidate(BANS_CACHEBUSTER)
 
-    def get_ban(self, username=None, email=None, ip=None):
+    def get_ban(self, username=None, email=None, ip=None, registration_only=False):
         checks = []
 
         if username:
             username = username.lower()
-            checks.append(BAN_USERNAME)
+            checks.append(self.model.USERNAME)
         if email:
             email = email.lower()
-            checks.append(BAN_EMAIL)
+            checks.append(self.model.EMAIL)
         if ip:
-            checks.append(BAN_IP)
+            checks.append(self.model.IP)
 
-        queryset = self.filter(is_checked=True)
+        queryset = self.filter(
+            is_checked=True,
+            registration_only=registration_only,
+        )
+
         if len(checks) == 1:
             queryset = queryset.filter(check_type=checks[0])
         elif checks:
@@ -63,20 +56,29 @@ class BansManager(models.Manager):
         for ban in queryset.order_by('-id').iterator():
             if ban.is_expired:
                 continue
-            elif (ban.check_type == BAN_USERNAME and username and
-                    ban.check_value(username)):
+            elif (ban.check_type == self.model.USERNAME and username and ban.check_value(username)):
                 return ban
-            elif (ban.check_type == BAN_EMAIL and email and
-                    ban.check_value(email)):
+            elif (ban.check_type == self.model.EMAIL and email and ban.check_value(email)):
                 return ban
-            elif ban.check_type == BAN_IP and ip and ban.check_value(ip):
+            elif ban.check_type == self.model.IP and ip and ban.check_value(ip):
                 return ban
         else:
             raise Ban.DoesNotExist('specified values are not banned')
 
 
 class Ban(models.Model):
-    check_type = models.PositiveIntegerField(default=BAN_USERNAME, db_index=True)
+    USERNAME = 0
+    EMAIL = 1
+    IP = 2
+
+    CHOICES = [
+        (USERNAME, _('Username')),
+        (EMAIL, _('E-mail address')),
+        (IP, _('IP address')),
+    ]
+
+    check_type = models.PositiveIntegerField(default=USERNAME, choices=CHOICES, db_index=True)
+    registration_only = models.BooleanField(default=False, db_index=True)
     banned_value = models.CharField(max_length=255, db_index=True)
     user_message = models.TextField(null=True, blank=True)
     staff_message = models.TextField(null=True, blank=True)
@@ -92,12 +94,8 @@ class Ban(models.Model):
         return super(Ban, self).save(*args, **kwargs)
 
     def get_serialized_message(self):
-        from ..serializers import BanMessageSerializer
+        from misago.users.serializers import BanMessageSerializer
         return BanMessageSerializer(self).data
-
-    @property
-    def check_name(self):
-        return BANS_CHOICES[self.check_type][1]
 
     @property
     def name(self):
@@ -122,7 +120,11 @@ class Ban(models.Model):
 
 
 class BanCache(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, primary_key=True, related_name='ban_cache')
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        primary_key=True,
+        related_name='ban_cache',
+    )
     ban = models.ForeignKey(Ban, null=True, blank=True, on_delete=models.SET_NULL)
     bans_version = models.PositiveIntegerField(default=0)
     user_message = models.TextField(null=True, blank=True)
@@ -133,16 +135,16 @@ class BanCache(models.Model):
         try:
             super(BanCache, self).save(*args, **kwargs)
         except IntegrityError:
-            pass # first come is first serve with ban cache
+            pass  # first come is first serve with ban cache
 
     def get_serialized_message(self):
-        from ..serializers import BanMessageSerializer
+        from misago.users.serializers import BanMessageSerializer
         temp_ban = Ban(
             id=1,
-            check_type=BAN_USERNAME,
+            check_type=Ban.USERNAME,
             user_message=self.user_message,
             staff_message=self.staff_message,
-            expires_on=self.expires_on
+            expires_on=self.expires_on,
         )
         return BanMessageSerializer(temp_ban).data
 
@@ -152,8 +154,7 @@ class BanCache(models.Model):
 
     @property
     def is_valid(self):
-        version_is_valid = cachebuster.is_valid(BAN_CACHEBUSTER,
-                                                self.bans_version)
+        version_is_valid = cachebuster.is_valid(BANS_CACHEBUSTER, self.bans_version)
         expired = self.expires_on and self.expires_on < timezone.now()
 
         return version_is_valid and not expired

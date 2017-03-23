@@ -1,15 +1,16 @@
-import React from 'react';
+import React from 'react'; // jshint ignore:line
 import { connect } from 'react-redux';
+import BanDetails from './ban-details'; // jshint ignore:line
+import { Posts, Threads } from './feed'; // jshint ignore:line
+import Followers from './followers'; // jshint ignore:line
+import Follows from './follows'; // jshint ignore:line
+import UsernameHistory from './username-history'; // jshint ignore:line
+import Header from './header'; // jshint ignore:line
+import ModerationNav from './moderation/nav'; // jshint ignore:line
+import { SideNav, CompactNav } from './navs'; // jshint ignore:line
 import Avatar from 'misago/components/avatar'; // jshint ignore:line
-import BanDetails from 'misago/components/profile/ban-details'; // jshint ignore:line
-import Followers from 'misago/components/profile/followers'; // jshint ignore:line
-import Follows from 'misago/components/profile/follows'; // jshint ignore:line
-import UsernameHistory from 'misago/components/profile/username-history'; // jshint ignore:line
-import Header from 'misago/components/profile/header'; // jshint ignore:line
-import ModerationNav from 'misago/components/profile/moderation/nav'; // jshint ignore:line
-import { SideNav, CompactNav } from 'misago/components/profile/navs'; // jshint ignore:line
 import WithDropdown from 'misago/components/with-dropdown';
-import misago from 'misago/index';
+import misago from 'misago';
 import { hydrate } from 'misago/reducers/profile'; // jshint ignore:line
 import polls from 'misago/services/polls';
 import store from 'misago/services/store'; // jshint ignore:line
@@ -91,39 +92,76 @@ export default class extends WithDropdown {
 
   render() {
     /* jshint ignore:start */
-    return <div className={this.getClassName()}>
+    const pages = misago.get('PROFILE_PAGES');
 
-      <Header user={this.props.user}
+    return (
+      <div className={this.getClassName()}>
+
+        <Header
+          user={this.props.user}
+          profile={this.props.profile}
+          toggleNav={this.toggleNav}
+          toggleModeration={this.toggleModeration}
+        />
+
+        <div className="page-header page-header-followup visible-sm-block">
+          <div className="container">
+            <CompactNav
+              className="nav nav-pills"
+              pages={pages}
+              baseUrl={misago.get('PROFILE').absolute_url}
               profile={this.props.profile}
-              toggleNav={this.toggleNav}
-              toggleModeration={this.toggleModeration} />
-
-      <div className={this.getCompactNavClassName()}>
-        {this.getNavDropdown()}
-      </div>
-      <div className="container">
-
-        <div className="row">
-          <div className="col-md-3 hidden-xs hidden-sm">
-
-            <div className="profile-side-avatar">
-              <Avatar user={this.props.profile} size="400" />
-            </div>
-
-            <SideNav pages={misago.get('PROFILE_PAGES')}
-                     baseUrl={misago.get('PROFILE').absolute_url}
-                     profile={this.props.profile} />
-
-          </div>
-          <div className="col-md-9">
-
-            {this.props.children}
-
+            />
           </div>
         </div>
 
+        <div className="page-header page-header-followup visible-xs-block">
+          <div className="container">
+            <div className="dropdown">
+              <button
+                aria-expanded="true"
+                aria-haspopup="true"
+                className="btn btn-default dropdown-toggle btn-block"
+                data-toggle="dropdown"
+                type="button"
+              >
+                <span className="material-icon">
+                  menu
+                </span>
+                {gettext("Menu")}
+              </button>
+              <CompactNav
+                pages={pages}
+                baseUrl={misago.get('PROFILE').absolute_url}
+                profile={this.props.profile}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="container">
+
+          <div className="row">
+            <div className="col-md-3 hidden-xs hidden-sm">
+
+              <div className="profile-side-avatar">
+                <Avatar user={this.props.profile} size="400" />
+              </div>
+
+              <SideNav
+                pages={pages}
+                baseUrl={misago.get('PROFILE').absolute_url}
+                profile={this.props.profile}
+              />
+
+            </div>
+            <div className="col-md-9">
+              {this.props.children}
+            </div>
+          </div>
+
+        </div>
       </div>
-    </div>;
+    );
     /* jshint ignore:end */
   }
 }
@@ -133,24 +171,15 @@ export function select(store) {
     'tick': store.tick.tick,
     'user': store.auth.user,
     'users': store.users,
+    'posts': store.posts,
     'profile': store.profile,
     'username-history': store['username-history']
   };
 }
 
-class Placeholder extends React.Component {
-  render() {
-    // jshint ignore:start
-    return <div className="container">
-      <p>{"Hello, I'm placeholder for " + this.props.route.name}</p>
-    </div>;
-    // jshint ignore:end
-  }
-}
-
 const COMPONENTS = {
-  'posts': Placeholder,
-  'threads': Placeholder,
+  'posts': Posts,
+  'threads': Threads,
   'followers': Followers,
   'follows': Follows,
   'username-history': UsernameHistory,

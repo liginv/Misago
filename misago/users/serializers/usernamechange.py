@@ -1,24 +1,27 @@
 from rest_framework import serializers
 
-from ..models import UsernameChange
-from .user import BasicUserSerializer
+from misago.users.models import UsernameChange
+
+from .user import UserSerializer as BaseUserSerializer
 
 
 __all__ = ['UsernameChangeSerializer']
 
+UserSerializer = BaseUserSerializer.subset_fields('id', 'username', 'avatars', 'absolute_url')
+
 
 class UsernameChangeSerializer(serializers.ModelSerializer):
-    user = BasicUserSerializer(many=False, read_only=True)
-    changed_by = BasicUserSerializer(many=False, read_only=True)
+    user = UserSerializer(many=False, read_only=True)
+    changed_by = UserSerializer(many=False, read_only=True)
 
     class Meta:
         model = UsernameChange
-        fields = (
+        fields = [
             'id',
             'user',
             'changed_by',
             'changed_by_username',
             'changed_on',
             'new_username',
-            'old_username'
-        )
+            'old_username',
+        ]

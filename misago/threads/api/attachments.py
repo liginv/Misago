@@ -1,14 +1,13 @@
+from rest_framework import viewsets
+from rest_framework.response import Response
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.template.defaultfilters import filesizeformat
 from django.utils.translation import gettext as _
 
-from rest_framework import viewsets
-from rest_framework.response import Response
-
 from misago.acl import add_acl
-
-from ..models import Attachment, AttachmentType
-from ..serializers import AttachmentSerializer
+from misago.threads.models import Attachment, AttachmentType
+from misago.threads.serializers import AttachmentSerializer
 
 
 IMAGE_EXTENSIONS = ('jpg', 'jpeg', 'png', 'gif')
@@ -16,15 +15,13 @@ IMAGE_EXTENSIONS = ('jpg', 'jpeg', 'png', 'gif')
 
 class AttachmentViewSet(viewsets.ViewSet):
     def create(self, request):
-        if not request.user.acl['max_attachment_size']:
+        if not request.user.acl_cache['max_attachment_size']:
             raise PermissionDenied(_("You don't have permission to upload new files."))
 
         try:
             return self.create_attachment(request)
         except ValidationError as e:
-            return Response({
-                'detail': e.args[0]
-            }, status=400)
+            return Response({'detail': e.args[0]}, status=400)
 
     def create_attachment(self, request):
         upload = request.FILES.get('upload')
@@ -33,7 +30,7 @@ class AttachmentViewSet(viewsets.ViewSet):
 
         user_roles = set(r.pk for r in request.user.get_roles())
         filetype = validate_filetype(upload, user_roles)
-        validate_filesize(upload, filetype, request.user.acl['max_attachment_size'])
+        validate_filesize(upload, filetype, request.user.acl_cache['max_attachment_size'])
 
         attachment = Attachment(
             secret=Attachment.generate_new_secret(),
@@ -87,17 +84,23 @@ def validate_filetype(upload, user_roles):
 def validate_filesize(upload, filetype, hard_limit):
     if upload.size > hard_limit * 1024:
         message = _("You can't upload files larger than %(limit)s (your file has %(upload)s).")
-        raise ValidationError(message % {
-            'upload': filesizeformat(upload.size).rstrip('.0'),
-            'limit': filesizeformat(hard_limit * 1024).rstrip('.0')
-        })
+        raise ValidationError(
+            message % {
+                'upload': filesizeformat(upload.size).rstrip('.0'),
+                'limit': filesizeformat(hard_limit * 1024).rstrip('.0'),
+            }
+        )
 
     if filetype.size_limit and upload.size > filetype.size_limit * 1024:
-        message = _("You can't upload files of this type larger than %(limit)s (your file has %(upload)s).")
-        raise ValidationError(message % {
-            'upload': filesizeformat(upload.size).rstrip('.0'),
-            'limit': filesizeformat(filetype.size_limit * 1024).rstrip('.0')
-        })
+        message = _(
+            "You can't upload files of this type larger than %(limit)s (your file has %(upload)s)."
+        )
+        raise ValidationError(
+            message % {
+                'upload': filesizeformat(upload.size).rstrip('.0'),
+                'limit': filesizeformat(filetype.size_limit * 1024).rstrip('.0'),
+            }
+        )
 
 
 def is_upload_image(upload):
@@ -107,4 +110,3 @@ def is_upload_image(upload):
         if filename.endswith('.%s' % extension):
             return True
     return False
-

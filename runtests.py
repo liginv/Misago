@@ -59,8 +59,10 @@ def setup_testproject():
         settings_file = settings_file.replace('{{ secret_key }}', 't3stpr0j3ct')
 
         settings_file += """
-# disable account validation via API's
-MISAGO_NEW_REGISTRATIONS_VALIDATORS = ()
+# disable account validation via Stop Forum Spam
+MISAGO_NEW_REGISTRATIONS_VALIDATORS = (
+    'misago.users.validators.validate_gmail_email',
+)
 
 # store mails in memory
 EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
@@ -77,6 +79,22 @@ CACHES = {
 PASSWORD_HASHERS = (
     'django.contrib.auth.hashers.MD5PasswordHasher',
 )
+
+
+# Use english search config
+MISAGO_SEARCH_CONFIG = 'english'
+
+
+# Register test post validator
+MISAGO_POST_VALIDATORS = [
+    'misago.core.testproject.validators.test_post_validator',
+]
+
+
+# Register test post search filter
+MISAGO_POST_SEARCH_FILTERS = [
+    'misago.core.testproject.searchfilters.test_filter',
+]
 """
 
     if os.environ.get('TRAVIS'):
@@ -119,8 +137,8 @@ def run_django(*args, **kwargs):
     setup()
     setup_test_environment()
 
-    from django.core.management.commands import test
-    sys.exit(test.Command().execute(*args, **kwargs))
+    from django.core.management import call_command
+    sys.exit(call_command('test', *args, **kwargs))
 
 
 if __name__ == '__main__':

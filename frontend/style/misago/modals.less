@@ -3,6 +3,24 @@
 // --------------------------------------------------
 
 
+// Modal toolbar
+.modal-toolbar {
+  background: @gray-lighter;
+  border-bottom: 1px solid @modal-header-border-color;
+  overflow: auto;
+  padding: @padding-base-vertical @padding-base-horizontal;
+
+  .pull-left {
+    margin-right: 8px;
+  }
+
+  p {
+    padding: @padding-small-vertical 0px;
+    margin-bottom: 0px;
+  }
+}
+
+
 // Modals displaying messages
 
 // Small displays
@@ -76,13 +94,6 @@
 // Modal form
 .modal-body .form-group {
   min-height: 34px;
-}
-
-@media screen and (min-width: @screen-md-min) {
-  .modal-body .form-group .control-label {
-    position: relative;
-    top: 7px;
-  }
 }
 
 

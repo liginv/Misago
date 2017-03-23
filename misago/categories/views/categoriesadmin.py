@@ -4,15 +4,15 @@ from django.utils.translation import ugettext_lazy as _
 
 from misago.acl import version as acl_version
 from misago.admin.views import generic
+from misago.categories import THREADS_ROOT_NAME
+from misago.categories.forms import CategoryFormFactory, DeleteFormFactory
+from misago.categories.models import Category, RoleCategoryACL
 from misago.threads.threadtypes import trees_map
-
-from ..forms import CategoryFormFactory, DeleteFormFactory
-from ..models import THREADS_ROOT_NAME, Category, RoleCategoryACL
 
 
 class CategoryAdmin(generic.AdminBaseMixin):
     root_link = 'misago:admin:categories:nodes:index'
-    Model = Category
+    model = Category
     templates_dir = 'misago/admin/categories'
     message_404 = _("Requested category does not exist.")
 
@@ -39,7 +39,7 @@ class CategoriesList(CategoryAdmin, generic.ListView):
 
         children_lists = {}
 
-        for i, item in enumerate(context['items']):
+        for item in context['items']:
             item.level_range = range(item.level - 1)
             item.first = False
             item.last = False
@@ -59,13 +59,13 @@ class CategoryFormMixin(object):
     def handle_form(self, form, request, target):
         if form.instance.pk:
             if form.instance.parent_id != form.cleaned_data['new_parent'].pk:
-                form.instance.move_to(
-                    form.cleaned_data['new_parent'], position='last-child')
+                form.instance.move_to(form.cleaned_data['new_parent'], position='last-child')
             form.instance.save()
             if form.instance.parent_id != form.cleaned_data['new_parent'].pk:
                 Category.objects.clear_cache()
         else:
-            form.instance.insert_at(form.cleaned_data['new_parent'],
+            form.instance.insert_at(
+                form.cleaned_data['new_parent'],
                 position='last-child',
                 save=True,
             )
@@ -77,11 +77,13 @@ class CategoryFormMixin(object):
 
             copied_acls = []
             for acl in copy_from.category_role_set.all():
-                copied_acls.append(RoleCategoryACL(
-                    role_id=acl.role_id,
-                    category=form.instance,
-                    category_role_id=acl.category_role_id,
-                ))
+                copied_acls.append(
+                    RoleCategoryACL(
+                        role_id=acl.role_id,
+                        category=form.instance,
+                        category_role_id=acl.category_role_id,
+                    )
+                )
 
             if copied_acls:
                 RoleCategoryACL.objects.bulk_create(copied_acls)
@@ -111,7 +113,11 @@ class DeleteCategory(CategoryAdmin, generic.ModelFormView):
 
         if move_children_to:
             for child in target.get_children():
-                Category.objects.move_node(child, move_children_to, 'last-child')
+                # refresh child and new parent
+                move_children_to = Category.objects.get(pk=move_children_to.pk)
+                child = Category.objects.get(pk=child.pk)
+
+                child.move_to(move_children_to, 'last-child')
                 if move_threads_to and child.pk == move_threads_to.pk:
                     move_threads_to = child
         else:
@@ -126,7 +132,9 @@ class DeleteCategory(CategoryAdmin, generic.ModelFormView):
         else:
             target.delete_content()
 
-        form.instance.delete()
+        # refresh instance
+        instance = Category.objects.get(pk=form.instance.pk)
+        instance.delete()
 
         messages.success(request, self.message_submit % {'name': target.name})
         return redirect(self.root_link)

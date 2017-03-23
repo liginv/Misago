@@ -3,7 +3,7 @@ import os
 from django.test import TestCase
 from django.utils.encoding import smart_str
 
-from .. import setup
+from misago.core import setup
 
 
 class MockParser(object):
@@ -33,9 +33,9 @@ class SetupTests(TestCase):
 
     def test_get_misago_project_template(self):
         """get_misago_project_template returns correct path to template"""
-        misago_path = os.path.dirname(
-            os.path.dirname(os.path.dirname(__file__)))
+        misago_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         test_project_path = os.path.join(misago_path, 'project_template')
 
-        self.assertEqual(smart_str(setup.get_misago_project_template()),
-                         smart_str(test_project_path))
+        self.assertEqual(
+            smart_str(setup.get_misago_project_template()), smart_str(test_project_path)
+        )

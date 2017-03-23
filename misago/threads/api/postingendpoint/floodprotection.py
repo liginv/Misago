@@ -1,8 +1,9 @@
 from datetime import timedelta
 
-from django.conf import settings
 from django.utils import timezone
 from django.utils.translation import ugettext as _
+
+from misago.conf import settings
 
 from . import PostingEndpoint, PostingInterrupt, PostingMiddleware
 
@@ -12,7 +13,8 @@ MIN_POSTING_PAUSE = 3
 
 class FloodProtectionMiddleware(PostingMiddleware):
     def use_this_middleware(self):
-        return not self.user.acl['can_omit_flood_protection'] and self.mode != PostingEndpoint.EDIT
+        return not self.user.acl_cache['can_omit_flood_protection'
+                                       ] and self.mode != PostingEndpoint.EDIT
 
     def interrupt_posting(self, serializer):
         now = timezone.now()

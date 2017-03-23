@@ -1,18 +1,20 @@
-from django.core.urlresolvers import reverse
-
 from rest_framework import serializers
 
-from misago.users.serializers import UserSerializer
+from django.urls import reverse
 
-from ..models import Post
-
-
-__all__ = [
-    'PostSerializer',
-]
+from misago.core.serializers import MutableFields
+from misago.threads.models import Post
+from misago.users.serializers import UserSerializer as BaseUserSerializer
 
 
-class PostSerializer(serializers.ModelSerializer):
+__all__ = ['PostSerializer']
+
+UserSerializer = BaseUserSerializer.subset_fields(
+    'id', 'username', 'rank', 'avatars', 'signature', 'title', 'status', 'absolute_url'
+)
+
+
+class PostSerializer(serializers.ModelSerializer, MutableFields):
     poster = UserSerializer(many=False, read_only=True)
     poster_ip = serializers.SerializerMethodField()
     content = serializers.SerializerMethodField()
@@ -23,13 +25,16 @@ class PostSerializer(serializers.ModelSerializer):
     acl = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
     is_new = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+    last_likes = serializers.SerializerMethodField()
+    likes = serializers.SerializerMethodField()
 
     api = serializers.SerializerMethodField()
     url = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
-        fields = (
+        fields = [
             'id',
             'poster',
             'poster_name',
@@ -52,17 +57,18 @@ class PostSerializer(serializers.ModelSerializer):
             'is_event',
             'event_type',
             'event_context',
-
             'acl',
+            'is_liked',
             'is_new',
             'is_read',
-
+            'last_likes',
+            'likes',
             'api',
             'url',
-        )
+        ]
 
     def get_poster_ip(self, obj):
-        if self.context['user'].acl['can_see_users_ips']:
+        if self.context['user'].acl_cache['can_see_users_ips']:
             return obj.poster_ip
         else:
             return None
@@ -82,6 +88,12 @@ class PostSerializer(serializers.ModelSerializer):
         except AttributeError:
             return None
 
+    def get_is_liked(self, obj):
+        try:
+            return obj.is_liked
+        except AttributeError:
+            return None
+
     def get_is_new(self, obj):
         try:
             return obj.is_new
@@ -94,12 +106,39 @@ class PostSerializer(serializers.ModelSerializer):
         except AttributeError:
             return None
 
+    def get_last_likes(self, obj):
+        if obj.is_event:
+            return None
+
+        try:
+            if obj.acl['can_see_likes']:
+                return obj.last_likes
+        except AttributeError:
+            return None
+
+    def get_likes(self, obj):
+        if obj.is_event:
+            return None
+
+        try:
+            if obj.acl['can_see_likes']:
+                return obj.likes
+        except AttributeError:
+            return None
+
     def get_api(self, obj):
-        return {
+        api_links = {
             'index': obj.get_api_url(),
+            'likes': obj.get_likes_api_url(),
             'editor': obj.get_editor_api_url(),
+            'edits': obj.get_edits_api_url(),
             'read': obj.get_read_api_url(),
         }
+
+        if obj.is_event:
+            del api_links['likes']
+
+        return api_links
 
     def get_url(self, obj):
         return {
@@ -110,18 +149,22 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_last_editor_url(self, obj):
         if obj.last_editor_id:
-            return reverse('misago:user', kwargs={
-                'pk': obj.last_editor_id,
-                'slug': obj.last_editor_slug
-            })
+            return reverse(
+                'misago:user', kwargs={
+                    'pk': obj.last_editor_id,
+                    'slug': obj.last_editor_slug,
+                }
+            )
         else:
             return None
 
     def get_hidden_by_url(self, obj):
         if obj.hidden_by_id:
-            return reverse('misago:user', kwargs={
-                'pk': obj.hidden_by_id,
-                'slug': obj.hidden_by_slug
-            })
+            return reverse(
+                'misago:user', kwargs={
+                    'pk': obj.hidden_by_id,
+                    'slug': obj.hidden_by_slug,
+                }
+            )
         else:
             return None

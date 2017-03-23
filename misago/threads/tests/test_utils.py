@@ -1,16 +1,11 @@
 from misago.categories.models import Category
 from misago.core.testutils import MisagoTestCase
+from misago.threads import testutils
+from misago.threads.utils import add_categories_to_items, get_thread_id_from_url
 
-from .. import testutils
-from ..utils import add_categories_to_threads, get_thread_id_from_url
 
-
-class AddCategoriesToThreadsTests(MisagoTestCase):
+class AddCategoriesToItemsTests(MisagoTestCase):
     def setUp(self):
-        super(AddCategoriesToThreadsTests, self).setUp()
-
-        self.root = Category.objects.root_category()
-
         """
         Create categories tree for test cases:
 
@@ -24,16 +19,29 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
         Category E
           + Subcategory F
         """
+
+        super(AddCategoriesToItemsTests, self).setUp()
+
+        self.root = Category.objects.root_category()
+
         Category(
             name='Category A',
             slug='category-a',
             css_class='showing-category-a',
-        ).insert_at(self.root, position='last-child', save=True)
+        ).insert_at(
+            self.root,
+            position='last-child',
+            save=True,
+        )
         Category(
             name='Category E',
             slug='category-e',
             css_class='showing-category-e',
-        ).insert_at(self.root, position='last-child', save=True)
+        ).insert_at(
+            self.root,
+            position='last-child',
+            save=True,
+        )
 
         self.root = Category.objects.root_category()
 
@@ -42,19 +50,31 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
             name='Category B',
             slug='category-b',
             css_class='showing-category-b',
-        ).insert_at(self.category_a, position='last-child', save=True)
+        ).insert_at(
+            self.category_a,
+            position='last-child',
+            save=True,
+        )
 
         self.category_b = Category.objects.get(slug='category-b')
         Category(
             name='Category C',
             slug='category-c',
             css_class='showing-category-c',
-        ).insert_at(self.category_b, position='last-child', save=True)
+        ).insert_at(
+            self.category_b,
+            position='last-child',
+            save=True,
+        )
         Category(
             name='Category D',
             slug='category-d',
             css_class='showing-category-d',
-        ).insert_at(self.category_b, position='last-child', save=True)
+        ).insert_at(
+            self.category_b,
+            position='last-child',
+            save=True,
+        )
 
         self.category_c = Category.objects.get(slug='category-c')
         self.category_d = Category.objects.get(slug='category-d')
@@ -64,7 +84,11 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
             name='Category F',
             slug='category-f',
             css_class='showing-category-f',
-        ).insert_at(self.category_e, position='last-child', save=True)
+        ).insert_at(
+            self.category_e,
+            position='last-child',
+            save=True,
+        )
 
         self.clear_state()
 
@@ -78,13 +102,12 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
         self.category_e = Category.objects.get(slug='category-e')
         self.category_f = Category.objects.get(slug='category-f')
 
-        self.categories = list(Category.objects.all_categories(
-            include_root=True))
+        self.categories = list(Category.objects.all_categories(include_root=True))
 
     def test_root_thread_from_root(self):
         """thread in root category is handled"""
         thread = testutils.post_thread(category=self.root)
-        add_categories_to_threads(self.root, self.categories, [thread])
+        add_categories_to_items(self.root, self.categories, [thread])
 
         self.assertIsNone(thread.top_category)
         self.assertEqual(thread.category, self.root)
@@ -92,7 +115,7 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
     def test_root_thread_from_elsewhere(self):
         """thread in root category is handled"""
         thread = testutils.post_thread(category=self.root)
-        add_categories_to_threads(self.category_e, self.categories, [thread])
+        add_categories_to_items(self.category_e, self.categories, [thread])
 
         self.assertIsNone(thread.top_category)
         self.assertEqual(thread.category, self.root)
@@ -100,7 +123,7 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
     def test_direct_child_thread_from_parent(self):
         """thread in direct child category is handled"""
         thread = testutils.post_thread(category=self.category_e)
-        add_categories_to_threads(self.root, self.categories, [thread])
+        add_categories_to_items(self.root, self.categories, [thread])
 
         self.assertEqual(thread.top_category, self.category_e)
         self.assertEqual(thread.category, self.category_e)
@@ -108,7 +131,7 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
     def test_direct_child_thread_from_elsewhere(self):
         """thread in direct child category is handled"""
         thread = testutils.post_thread(category=self.category_e)
-        add_categories_to_threads(self.category_b, self.categories, [thread])
+        add_categories_to_items(self.category_b, self.categories, [thread])
 
         self.assertEqual(thread.top_category, self.category_e)
         self.assertEqual(thread.category, self.category_e)
@@ -116,7 +139,7 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
     def test_child_thread_from_root(self):
         """thread in child category is handled"""
         thread = testutils.post_thread(category=self.category_d)
-        add_categories_to_threads(self.root, self.categories, [thread])
+        add_categories_to_items(self.root, self.categories, [thread])
 
         self.assertEqual(thread.top_category, self.category_a)
         self.assertEqual(thread.category, self.category_d)
@@ -124,7 +147,7 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
     def test_child_thread_from_parent(self):
         """thread in child category is handled"""
         thread = testutils.post_thread(category=self.category_d)
-        add_categories_to_threads(self.category_a, self.categories, [thread])
+        add_categories_to_items(self.category_a, self.categories, [thread])
 
         self.assertEqual(thread.top_category, self.category_b)
         self.assertEqual(thread.category, self.category_d)
@@ -132,7 +155,7 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
     def test_child_thread_from_category(self):
         """thread in child category is handled"""
         thread = testutils.post_thread(category=self.category_d)
-        add_categories_to_threads(self.category_d, self.categories, [thread])
+        add_categories_to_items(self.category_d, self.categories, [thread])
 
         self.assertIsNone(thread.top_category)
         self.assertEqual(thread.category, self.category_d)
@@ -140,7 +163,7 @@ class AddCategoriesToThreadsTests(MisagoTestCase):
     def test_child_thread_from_elsewhere(self):
         """thread in child category is handled"""
         thread = testutils.post_thread(category=self.category_d)
-        add_categories_to_threads(self.category_f, self.categories, [thread])
+        add_categories_to_items(self.category_f, self.categories, [thread])
 
         self.assertEqual(thread.top_category, self.category_a)
         self.assertEqual(thread.category, self.category_d)
@@ -164,91 +187,103 @@ class MockRequest(object):
 class GetThreadIdFromUrlTests(MisagoTestCase):
     def test_get_thread_id_from_valid_urls(self):
         """get_thread_id_from_url extracts thread pk from valid urls"""
-        TEST_CASES = (
+        TEST_CASES = [
             {
                 # perfect match
                 'request': MockRequest('https', 'testforum.com', '/discuss/'),
-                'url': 'https://testforum.com/discuss/thread/test-thread-123/',
-                'pk': 123
+                'url': 'https://testforum.com/discuss/t/test-thread/123/',
+                'pk': 123,
             },
             {
                 # we don't validate scheme in case site recently moved to https
                 # but user still has old url's saved somewhere
                 'request': MockRequest('http', 'testforum.com', '/discuss/'),
-                'url': 'http://testforum.com/discuss/thread/test-thread-432/post/12321/',
-                'pk': 432
+                'url': 'http://testforum.com/discuss/t/test-thread/432/post/12321/',
+                'pk': 432,
             },
             {
                 # extract thread id from other thread urls
                 'request': MockRequest('https', 'testforum.com', '/discuss/'),
-                'url': 'http://testforum.com/discuss/thread/test-thread-432/post/12321/',
-                'pk': 432
+                'url': 'http://testforum.com/discuss/t/test-thread/432/post/12321/',
+                'pk': 432,
             },
             {
                 # extract thread id from thread page url
                 'request': MockRequest('http', 'testforum.com', '/discuss/'),
-                'url': 'http://testforum.com/discuss/thread/test-thread-432/123/',
-                'pk': 432
+                'url': 'http://testforum.com/discuss/t/test-thread/432/123/',
+                'pk': 432,
             },
             {
                 # extract thread id from thread last post url with relative schema
                 'request': MockRequest('http', 'testforum.com', '/discuss/'),
-                'url': '//testforum.com/discuss/thread/test-thread-18/last/',
-                'pk': 18
+                'url': '//testforum.com/discuss/t/test-thread/18/last/',
+                'pk': 18,
             },
             {
                 # extract thread id from url that lacks scheme
                 'request': MockRequest('http', 'testforum.com', ''),
-                'url': 'testforum.com/thread/test-thread-12/last/',
-                'pk': 12
+                'url': 'testforum.com/t/test-thread/12/last/',
+                'pk': 12,
             },
             {
                 # extract thread id from schemaless thread last post url
                 'request': MockRequest('http', 'testforum.com', '/discuss/'),
-                'url': 'testforum.com/discuss/thread/test-thread-18/last/',
-                'pk': 18
+                'url': 'testforum.com/discuss/t/test-thread/18/last/',
+                'pk': 18,
             },
             {
                 # extract thread id from url that lacks scheme and hostname
                 'request': MockRequest('http', 'testforum.com', ''),
-                'url': '/thread/test-thread-13/',
-                'pk': 13
+                'url': '/t/test-thread/13/',
+                'pk': 13,
             },
             {
                 # extract thread id from url that has port name
                 'request': MockRequest('http', '127.0.0.1:8000', ''),
-                'url': 'https://127.0.0.1:8000/thread/test-thread-13/',
-                'pk': 13
+                'url': 'https://127.0.0.1:8000/t/test-thread/13/',
+                'pk': 13,
             },
             {
                 # extract thread id from url that isn't trimmed
                 'request': MockRequest('http', '127.0.0.1:8000', ''),
-                'url': '   /thread/test-thread-13/   ',
-                'pk': 13
+                'url': '   /t/test-thread/13/   ',
+                'pk': 13,
             }
-        )
+        ]
 
         for case in TEST_CASES:
             pk = get_thread_id_from_url(case['request'], case['url'])
             self.assertEqual(
-                pk, case['pk'], 'get_thread_id_from_url for {} should return {}'.format(case['url'], case['pk']))
+                pk, case['pk'],
+                'get_thread_id_from_url for {} should return {}'.format(case['url'], case['pk'])
+            )
 
     def test_get_thread_id_from_invalid_urls(self):
-        TEST_CASES = (
+        TEST_CASES = [
             {
                 # invalid wsgi alias
                 'request': MockRequest('https', 'testforum.com'),
-                'url': 'http://testforum.com/discuss/thread/test-thread-123/'
+                'url': 'http://testforum.com/discuss/t/test-thread-123/',
             },
             {
                 # invalid hostname
                 'request': MockRequest('http', 'misago-project.org', '/discuss/'),
-                'url': 'https://testforum.com/discuss/thread/test-thread-432/post/12321/'
+                'url': 'https://testforum.com/discuss/t/test-thread-432/post/12321/',
+            },
+            {
+                # old thread url
+                'request': MockRequest('http', 'testforum.com'),
+                'url': 'https://testforum.com/thread/bobboberson-123/',
+            },
+            {
+                # dashed thread url
+                'request': MockRequest('http', 'testforum.com'),
+                'url': 'https://testforum.com/t/bobboberson-123/',
             },
             {
                 # non-thread url
                 'request': MockRequest('http', 'testforum.com'),
-                'url': 'https://testforum.com/user/bobboberson-123/'
+                'url': 'https://testforum.com/user/bobboberson-123/',
             },
             {
                 # rubbish url
@@ -265,7 +300,7 @@ class GetThreadIdFromUrlTests(MisagoTestCase):
                 'request': MockRequest('http', 'testforum.com'),
                 'url': ''
             }
-        )
+        ]
 
         for case in TEST_CASES:
             pk = get_thread_id_from_url(case['request'], case['url'])

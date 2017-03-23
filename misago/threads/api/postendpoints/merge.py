@@ -1,13 +1,13 @@
-from django.conf import settings
-from django.core.exceptions import PermissionDenied
-from django.utils.translation import ugettext as _, ungettext
-
 from rest_framework.response import Response
 
-from misago.acl import add_acl
+from django.core.exceptions import PermissionDenied
+from django.utils.translation import ugettext as _
+from django.utils.translation import ungettext
 
-from ...permissions.threads import exclude_invisible_posts
-from ...serializers import PostSerializer
+from misago.acl import add_acl
+from misago.conf import settings
+from misago.threads.permissions import exclude_invisible_posts
+from misago.threads.serializers import PostSerializer
 
 
 MERGE_LIMIT = settings.MISAGO_POSTS_PER_PAGE + settings.MISAGO_POSTS_TAIL
@@ -31,7 +31,16 @@ def posts_merge_endpoint(request, thread):
     for post in merged_posts:
         post.merge(first_post)
         post.delete()
+
+    if first_post.pk == thread.first_post_id:
+        first_post.set_search_document(thread.title)
+    else:
+        first_post.set_search_document()
+
     first_post.save()
+
+    first_post.update_search_vector()
+    first_post.save(update_fields=['search_vector'])
 
     thread.synchronize()
     thread.save()
@@ -59,7 +68,8 @@ def clean_posts_for_merge(request, thread):
         message = ungettext(
             "No more than %(limit)s post can be merged at single time.",
             "No more than %(limit)s posts can be merged at single time.",
-            MERGE_LIMIT)
+            MERGE_LIMIT,
+        )
         raise MergeError(message % {'limit': MERGE_LIMIT})
 
     posts_queryset = exclude_invisible_posts(request.user, thread.category, thread.post_set)
@@ -69,7 +79,9 @@ def clean_posts_for_merge(request, thread):
     for post in posts_queryset:
         if post.is_event:
             raise MergeError(_("Events can't be merged."))
-        if post.is_hidden and not (post.pk == thread.first_post_id or thread.category.acl['can_hide_posts']):
+        if post.is_hidden and not (
+                post.pk == thread.first_post_id or thread.category.acl['can_hide_posts']
+        ):
             raise MergeError(_("You can't merge posts the content you can't see."))
 
         if not posts:
@@ -84,7 +96,8 @@ def clean_posts_for_merge(request, thread):
                     raise MergeError(authorship_error)
 
             if posts[0].pk != thread.first_post_id:
-                if posts[0].is_hidden != post.is_hidden or posts[0].is_unapproved != post.is_unapproved:
+                if (posts[0].is_hidden != post.is_hidden or
+                        posts[0].is_unapproved != post.is_unapproved):
                     raise MergeError(_("Posts with different visibility can't be merged."))
 
             posts.append(post)

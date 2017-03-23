@@ -16,6 +16,15 @@ export class RegisterForm extends Form {
   constructor(props) {
     super(props);
 
+    const { username, password } = this.props.criteria;
+
+    let passwordMinLength = 0;
+    password.forEach((item) => {
+      if (item.name === 'MinimumLengthValidator') {
+        passwordMinLength = item.min_length;
+      }
+    });
+
     this.state = {
       isLoading: false,
 
@@ -27,14 +36,14 @@ export class RegisterForm extends Form {
       validators: {
         username: [
           validators.usernameContent(),
-          validators.usernameMinLength(misago.get('SETTINGS')),
-          validators.usernameMaxLength(misago.get('SETTINGS'))
+          validators.usernameMinLength(username.min_length),
+          validators.usernameMaxLength(username.max_length)
         ],
         email: [
           validators.email()
         ],
         password: [
-          validators.passwordMinLength(misago.get('SETTINGS'))
+          validators.passwordMinLength(passwordMinLength)
         ],
         captcha: captcha.validator()
       },
@@ -73,7 +82,12 @@ export class RegisterForm extends Form {
       this.setState({
         'errors': Object.assign({}, this.state.errors, rejection)
       });
-      snackbar.error(gettext("Form contains errors."));
+
+      if (rejection.__all__ && rejection.__all__.length > 0) {
+        snackbar.error(rejection.__all__[0]);
+      } else {
+        snackbar.error(gettext("Form contains errors."));
+      }
     } else if (rejection.status === 403 && rejection.ban) {
       showBannedPage(rejection.ban);
       modal.hide();
@@ -249,7 +263,12 @@ export default class extends React.Component {
                                username={this.state.complete.username}
                                email={this.state.complete.email} />;
     } else {
-      return <RegisterForm callback={this.completeRegistration}/>;
+      return (
+        <RegisterForm
+          callback={this.completeRegistration}
+          {...this.props}
+        />
+      );
     }
     /* jshint ignore:end */
   }

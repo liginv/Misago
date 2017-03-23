@@ -147,3 +147,44 @@
   white-space: normal;
   word-wrap: break-word;
 }
+
+
+// Stick to bottom on mobile
+@media screen and (max-width: @screen-xs-max) {
+  .dropdown-menu.stick-to-bottom {
+    border-radius: 0px;
+    border: none;
+
+    max-height: 300px;
+    overflow-y: auto;
+
+    .box-shadow(0px 0px @line-height-computed * 1.5 @gray-light);
+
+    clear: both;
+    top: auto;
+    width: 100%;
+
+    position: fixed;
+    bottom: 0px;
+
+    margin: 0px;
+    padding: 0px;
+
+    padding-bottom: @line-height-computed;
+
+    li {
+      float: none;
+
+      margin: 0px;
+
+      clear: both;
+
+      &>a, &>.btn {
+        padding-top: @line-height-computed * 0.75;
+        padding-bottom: @line-height-computed * 0.75;
+
+        border-bottom: 1px solid @dropdown-divider-bg;
+      }
+    }
+  }
+}

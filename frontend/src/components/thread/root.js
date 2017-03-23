@@ -4,6 +4,8 @@ import misago from 'misago/index';
 
 export function select(store) {
   return {
+    'participants': store.participants,
+    'poll': store.poll,
     'posts': store.posts,
     'thread': store.thread,
     'tick': store.tick.tick,

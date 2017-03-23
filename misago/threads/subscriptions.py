@@ -1,9 +1,6 @@
 from .models import Subscription
 
 
-__all__ = ['make_subscription_aware']
-
-
 def make_subscription_aware(user, target):
     if hasattr(target, '__iter__'):
         make_threads_subscription_aware(user, target)
@@ -15,7 +12,7 @@ def make_threads_subscription_aware(user, threads):
     if not threads:
         return
 
-    if user.is_anonymous():
+    if user.is_anonymous:
         for thread in threads:
             thread.subscription = None
     else:
@@ -25,7 +22,7 @@ def make_threads_subscription_aware(user, threads):
             threads_dict[thread.pk] = thread
 
         subscriptions_queryset = user.subscription_set.filter(
-            thread_id__in=threads_dict.keys()
+            thread_id__in=threads_dict.keys(),
         )
 
         for subscription in subscriptions_queryset.iterator():
@@ -33,7 +30,7 @@ def make_threads_subscription_aware(user, threads):
 
 
 def make_thread_subscription_aware(user, thread):
-    if user.is_anonymous():
+    if user.is_anonymous:
         thread.subscription = None
     else:
         try:

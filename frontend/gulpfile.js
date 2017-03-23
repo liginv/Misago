@@ -6,7 +6,7 @@ var gutil = require('gulp-util');
 var babelify = require('babelify');
 var browserify = require('browserify');
 var buffer = require('vinyl-buffer');
-var imageop = require('gulp-image-optimization');
+var image = require('gulp-image');
 var jshint = require('gulp-jshint');
 var less = require('gulp-less');
 var minify = require('gulp-minify-css');
@@ -39,6 +39,7 @@ gulp.task('fastbuild', [
   'faststyle',
   'faststatic',
   'fastvendorsources',
+  'copypolyfill',
   'copyzxcvbn'
 ]);
 
@@ -47,6 +48,7 @@ gulp.task('build', [
   'style',
   'static',
   'vendorsources',
+  'copypolyfill',
   'copyzxcvbn'
 ]);
 
@@ -77,6 +79,8 @@ gulp.task('lintsource', function() {
 });
 
 gulp.task('fastsource', ['lintsource'], function() {
+  process.env.NODE_ENV = 'development';
+
   return browserify({
       entries: getSources(),
       debug: true,
@@ -96,6 +100,8 @@ gulp.task('fastsource', ['lintsource'], function() {
 });
 
 gulp.task('watchifybuild', ['fastbuild'], function() {
+  process.env.NODE_ENV = 'development';
+
   var b = browserify({
       entries: getSources(),
       debug: true,
@@ -114,15 +120,18 @@ gulp.task('watchifybuild', ['fastbuild'], function() {
     .external('redux')
     .external('react-redux')
     .transform(babelify)
-    .on('error', function(err){
-      // print the error (can replace with gulp-util)
-      console.log(err.message);
-      // end this stream
+    .on('error', function(err) {
+      gutil.log(gutil.colors.red(err.toString() + '\n' + err.codeFrame));
       this.emit('end');
     });
 
     function bundle() {
-      b.bundle().pipe(fs.createWriteStream(misago + 'js/misago.js'));
+      b.bundle()
+        .on('error', function(err) {
+          gutil.log(gutil.colors.red(err.toString() + '\n' + err.codeFrame));
+          this.emit('end');
+        })
+        .pipe(fs.createWriteStream(misago + 'js/misago.js'));
     }
 
     b.on('update', bundle);
@@ -165,7 +174,10 @@ gulp.task('cleanstyle', function(cb) {
 
 gulp.task('faststyle', function() {
   return gulp.src('style/index.less')
-    .pipe(less())
+    .pipe(less().on('error', function(err) {
+        gutil.log(gutil.colors.red(err.toString()));
+        this.emit('end');
+      }))
     .pipe(rename('misago.css'))
     .pipe(gulp.dest(misago + 'css'));
 });
@@ -192,9 +204,7 @@ gulp.task('fastcopyimages', function() {
 
 gulp.task('copyimages', function() {
   return gulp.src('static/img/**/*')
-    .pipe(imageop({
-      optimizationLevel: 9
-    }))
+    .pipe(image())
     .pipe(gulp.dest(misago + 'img'));
 });
 
@@ -205,6 +215,8 @@ gulp.task('static', ['copyfonts', 'copyimages']);
 // Vendor tasks
 
 gulp.task('fastvendorsources', function() {
+  process.env.NODE_ENV = 'development';
+
   return browserify({
       entries: 'src/vendor.js',
       debug: true
@@ -250,6 +262,16 @@ gulp.task('vendorsources', function() {
 
 gulp.task('copyzxcvbn', function() {
   return gulp.src('node_modules/zxcvbn/dist/*')
+    .pipe(gulp.dest(misago + 'js'));
+});
+
+gulp.task('copypolyfill', function() {
+  return gulp.src('node_modules/babel-polyfill/dist/polyfill.js')
+    .pipe(rename('es2015.js'))
+    .pipe(buffer())
+    .pipe(sourcemaps.init())
+    .pipe(uglify())
+    .pipe(sourcemaps.write('.'))
     .pipe(gulp.dest(misago + 'js'));
 });
 

@@ -1,124 +1,95 @@
-import six
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import six
+from django.views import View
 
-from django.conf import settings
-from django.contrib.auth import get_user_model
-from django.core.urlresolvers import reverse
-from django.shortcuts import render as django_render
-from django.shortcuts import redirect
-
-from misago.core.shortcuts import get_object_or_404, paginate, pagination_dict
 from misago.core.utils import format_plaintext_for_html
-
-from ..activepostersranking import get_active_posters_ranking
-from ..models import Rank
-from ..pages import users_list
-from ..permissions.profiles import allow_browse_users_list
-from ..serializers import ScoredUserSerializer, UserSerializer
+from misago.users.models import Rank
+from misago.users.pages import users_list
+from misago.users.permissions import allow_browse_users_list
+from misago.users.viewmodels import ActivePosters, RankUsers
 
 
-def render(request, template, context):
-    request.frontend_context['USERS_LISTS'] = []
-
-    context['pages'] = users_list.get_sections(request)
-
-    for page in context['pages']:
-        page['reversed_link'] = reverse(page['link'])
-        request.frontend_context['USERS_LISTS'].append({
-            'name': six.text_type(page['name']),
-            'component': page['component'],
-        })
-
-    active_rank = context.get('rank')
-    for rank in Rank.objects.filter(is_tab=True).order_by('order'):
-        context['pages'].append({
-            'name': rank.name,
-            'reversed_link': reverse('misago:users-rank', kwargs={
-                'slug': rank.slug
-            }),
-            'is_active': active_rank.pk == rank.pk if active_rank else None
-        })
-
-        if rank.description:
-            description = {
-                'plain': rank.description,
-                'html': format_plaintext_for_html(rank.description)
-            }
-        else:
-            description = None
-
-        request.frontend_context['USERS_LISTS'].append({
-            'id': rank.pk,
-            'name': rank.name,
-            'slug': rank.slug,
-            'css_class': rank.css_class,
-            'description': description,
-            'component': 'rank',
-        })
-
-    for page in context['pages']:
-        if page['is_active']:
-            context['active_page'] = page
-            break
-
-    return django_render(request, template, context)
-
-
-def allow_see_list(f):
-    def decorator(request, *args, **kwargs):
+class ListView(View):
+    def get(self, request, *args, **kwargs):
         allow_browse_users_list(request.user)
-        return f(request, *args, **kwargs)
-    return decorator
+
+        context_data = self.get_context_data(request, *args, **kwargs)
+
+        sections = users_list.get_sections(request)
+
+        context_data['pages'] = sections
+
+        request.frontend_context['USERS_LISTS'] = []
+        for page in sections:
+            page['reversed_link'] = reverse(page['link'])
+            request.frontend_context['USERS_LISTS'].append({
+                'name': six.text_type(page['name']),
+                'component': page['component'],
+            })
+
+        active_rank = context_data.get('rank')
+        for rank in Rank.objects.filter(is_tab=True).order_by('order'):
+            context_data['pages'].append({
+                'name': rank.name,
+                'reversed_link': reverse('misago:users-rank', kwargs={'slug': rank.slug}),
+                'is_active': active_rank.pk == rank.pk if active_rank else None
+            })
+
+            if rank.description:
+                description = {
+                    'plain': rank.description,
+                    'html': format_plaintext_for_html(rank.description)
+                }
+            else:
+                description = None
+
+            request.frontend_context['USERS_LISTS'].append({
+                'id': rank.pk,
+                'name': rank.name,
+                'slug': rank.slug,
+                'css_class': rank.css_class,
+                'description': description,
+                'component': 'rank',
+            })
+
+        active_section = list(filter(lambda x: x['is_active'], sections))[0]
+        context_data['active_section'] = active_section
+
+        return render(request, self.template_name, context_data)
+
+    def get_context_data(self, request, *args, **kwargs):
+        return {}
 
 
-@allow_see_list
 def landing(request):
-    default = users_list.get_default_link()
-    return redirect(default)
+    allow_browse_users_list(request.user)
+    return redirect(users_list.get_default_link())
 
 
-@allow_see_list
-def active_posters(request):
-    ranking = get_active_posters_ranking()
+class ActivePostersView(ListView):
+    template_name = 'misago/userslists/active_posters.html'
 
-    request.frontend_context['USERS'] = {
-        'tracked_period': settings.MISAGO_RANKING_LENGTH,
-        'results': ScoredUserSerializer(ranking['users'], many=True).data,
-        'count': ranking['users_count']
-    }
+    def get_context_data(self, request, *args, **kwargs):
+        model = ActivePosters(request)
 
-    template = "misago/userslists/active_posters.html"
-    return render(request, template, {
-        'tracked_period': settings.MISAGO_RANKING_LENGTH,
-        'users': ranking['users'],
-        'users_count': ranking['users_count']
-    })
+        request.frontend_context['USERS'] = model.get_frontend_context()
+
+        return model.get_template_context()
 
 
-@allow_see_list
-def rank(request, slug, page=0):
-    rank = get_object_or_404(Rank.objects.filter(is_tab=True), slug=slug)
-    queryset = rank.user_set.select_related('rank').order_by('slug')
+class RankUsersView(ListView):
+    template_name = 'misago/userslists/rank.html'
 
-    page = paginate(queryset, page, settings.MISAGO_USERS_PER_PAGE, 4)
-    paginator = pagination_dict(page)
+    def get_context_data(self, request, slug, page=0):
+        rank = get_object_or_404(Rank.objects.filter(is_tab=True), slug=slug)
+        users = RankUsers(request, rank, page)
 
-    request.frontend_context['USERS'] = dict(
-        results=UserSerializer(page.object_list, many=True).data,
-        **paginator
-    )
+        request.frontend_context['USERS'] = users.get_frontend_context()
 
-    if rank.description:
-        description = {
-            'plain': rank.description,
-            'html': format_plaintext_for_html(rank.description)
+        context = {
+            'rank': rank,
         }
-    else:
-        description = None
+        context.update(users.get_template_context())
 
-    template = "misago/userslists/rank.html"
-    return render(request, template, {
-        'rank': rank,
-        'users': page.object_list,
-
-        'paginator': paginator
-    })
+        return context

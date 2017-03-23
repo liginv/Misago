@@ -3,8 +3,10 @@ from django.utils.translation import gettext as _
 
 from misago.acl import add_acl
 from misago.core.apipatch import ApiPatch
-from ...moderation import posts as moderation
-from ...permissions.threads import allow_approve_post, allow_hide_post, allow_protect_post, allow_unhide_post
+from misago.threads.models import PostLike
+from misago.threads.moderation import posts as moderation
+from misago.threads.permissions import (
+    allow_approve_post, allow_hide_post, allow_protect_post, allow_unhide_post)
 
 
 post_patch_dispatcher = ApiPatch()
@@ -17,7 +19,63 @@ def patch_acl(request, post, value):
         return {'acl': post.acl}
     else:
         return {'acl': None}
+
+
 post_patch_dispatcher.add('acl', patch_acl)
+
+
+def patch_is_liked(request, post, value):
+    if not post.acl['can_like']:
+        raise PermissionDenied(_("You can't like posts in this category."))
+
+    # grab like state for this post and user
+    try:
+        user_like = post.postlike_set.get(liker=request.user)
+    except PostLike.DoesNotExist:
+        user_like = None
+
+    # no change
+    if (value and user_like) or (not value and not user_like):
+        return {
+            'likes': post.likes,
+            'last_likes': post.last_likes or [],
+            'is_liked': value,
+        }
+
+    # like
+    if value:
+        post.postlike_set.create(
+            category=post.category,
+            thread=post.thread,
+            liker=request.user,
+            liker_name=request.user.username,
+            liker_slug=request.user.slug,
+            liker_ip=request.user_ip,
+        )
+        post.likes += 1
+
+    # unlike
+    if not value:
+        user_like.delete()
+        post.likes -= 1
+
+    post.last_likes = []
+    for like in post.postlike_set.all()[:4]:
+        post.last_likes.append({
+            'id': like.liker_id,
+            'username': like.liker_name,
+        })
+
+    post.save(update_fields=['likes', 'last_likes'])
+
+    return {
+        'likes': post.likes,
+        'last_likes': post.last_likes or [],
+        'is_liked': value,
+    }
+
+
+post_patch_dispatcher.replace('is-liked', patch_is_liked)
 
 
 def patch_is_protected(request, post, value):
@@ -27,6 +85,8 @@ def patch_is_protected(request, post, value):
     else:
         moderation.unprotect_post(request.user, post)
     return {'is_protected': post.is_protected}
+
+
 post_patch_dispatcher.replace('is-protected', patch_is_protected)
 
 
@@ -35,6 +95,8 @@ def patch_is_unapproved(request, post, value):
         allow_approve_post(request.user, post)
         moderation.approve_post(request.user, post)
     return {'is_unapproved': post.is_unapproved}
+
+
 post_patch_dispatcher.replace('is-unapproved', patch_is_unapproved)
 
 
@@ -47,6 +109,8 @@ def patch_is_hidden(request, post, value):
         moderation.unhide_post(request.user, post)
 
     return {'is_hidden': post.is_hidden}
+
+
 post_patch_dispatcher.replace('is-hidden', patch_is_hidden)
 
 

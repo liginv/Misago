@@ -10,16 +10,13 @@ class MisagoUsersConfig(AppConfig):
     verbose_name = "Misago Auth"
 
     def ready(self):
-        from . import signals
+        from . import signals as _
 
         self.register_default_usercp_pages()
         self.register_default_users_list_pages()
         self.register_default_user_profile_pages()
 
     def register_default_usercp_pages(self):
-        def show_signature_cp(request):
-            return request.user.acl['can_have_signature']
-
         usercp.add_section(
             link='misago:usercp-change-forum-options',
             name=_('Forum options'),
@@ -43,44 +40,21 @@ class MisagoUsersConfig(AppConfig):
         users_list.add_section(
             link='misago:users-active-posters',
             component='active-posters',
-            name=_('Active posters'))
+            name=_('Active posters')
+        )
 
     def register_default_user_profile_pages(self):
-        def posts_badge(request, profile):
-            return {
-                'value': profile.posts,
-                'attr': 'posts',
-            }
-
-        def threads_badge(request, profile):
-            return {
-                'value': profile.threads,
-                'attr': 'threads',
-            }
-
-        def followers_badge(request, profile):
-            return {
-                'value': profile.followers,
-                'attr': 'followers',
-            }
-
-        def following_badge(request, profile):
-            return {
-                'value': profile.following,
-                'attr': 'following',
-            }
-
         def can_see_names_history(request, profile):
-            if request.user.is_authenticated():
+            if request.user.is_authenticated:
                 is_account_owner = profile.pk == request.user.pk
-                has_permission = request.user.acl['can_see_users_name_history']
+                has_permission = request.user.acl_cache['can_see_users_name_history']
                 return is_account_owner or has_permission
             else:
                 return False
 
         def can_see_ban_details(request, profile):
-            if request.user.is_authenticated():
-                if request.user.acl['can_see_ban_details']:
+            if request.user.is_authenticated:
+                if request.user.acl_cache['can_see_ban_details']:
                     from .bans import get_user_ban
                     return bool(get_user_ban(profile))
                 else:
@@ -93,28 +67,24 @@ class MisagoUsersConfig(AppConfig):
             name=_("Posts"),
             icon='message',
             component='posts',
-            get_metadata=posts_badge,
         )
         user_profile.add_section(
             link='misago:user-threads',
             name=_("Threads"),
             icon='forum',
             component='threads',
-            get_metadata=threads_badge,
         )
         user_profile.add_section(
             link='misago:user-followers',
             name=_("Followers"),
             icon='favorite',
             component='followers',
-            get_metadata=followers_badge,
         )
         user_profile.add_section(
             link='misago:user-follows',
             name=_("Follows"),
             icon='favorite_border',
             component='follows',
-            get_metadata=following_badge,
         )
         user_profile.add_section(
             link='misago:username-history',

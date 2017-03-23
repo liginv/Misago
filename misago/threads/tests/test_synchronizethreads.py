@@ -1,11 +1,10 @@
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils.six import StringIO
-from django.utils.six.moves import range
 
 from misago.categories.models import Category
-
-from .. import testutils
-from ..management.commands import synchronizethreads
+from misago.threads import testutils
+from misago.threads.management.commands import synchronizethreads
 
 
 class SynchronizeThreadsTests(TestCase):
@@ -14,7 +13,7 @@ class SynchronizeThreadsTests(TestCase):
         command = synchronizethreads.Command()
 
         out = StringIO()
-        command.execute(stdout=out)
+        call_command(command, stdout=out)
         command_output = out.getvalue().strip()
 
         self.assertEqual(command_output, "No threads were found")
@@ -23,16 +22,16 @@ class SynchronizeThreadsTests(TestCase):
         """command synchronizes threads"""
         category = Category.objects.all_categories()[:1][0]
 
-        threads = [testutils.post_thread(category) for t in range(10)]
+        threads = [testutils.post_thread(category) for _ in range(10)]
         for i, thread in enumerate(threads):
-            [testutils.reply_thread(thread) for r in range(i)]
+            [testutils.reply_thread(thread) for _ in range(i)]
             thread.replies = 0
             thread.save()
 
         command = synchronizethreads.Command()
 
         out = StringIO()
-        command.execute(stdout=out)
+        call_command(command, stdout=out)
 
         for i, thread in enumerate(threads):
             db_thread = category.thread_set.get(id=thread.id)

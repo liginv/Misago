@@ -4,18 +4,15 @@ from django.utils import timezone
 from misago.threads.permissions import exclude_invisible_threads
 
 from . import signals
-from .dates import is_date_tracked
+from .dates import get_cutoff_date, is_date_tracked
 from .models import CategoryRead
-
-
-__all__ = ['make_read_aware', 'sync_record']
 
 
 def make_read_aware(user, categories):
     if not hasattr(categories, '__iter__'):
         categories = [categories]
 
-    if user.is_anonymous():
+    if user.is_anonymous:
         make_read(categories)
         return None
 
@@ -27,9 +24,7 @@ def make_read_aware(user, categories):
             categories_dict[category.pk] = category
 
     if categories_dict:
-        categories_records = user.categoryread_set.filter(
-            category__in=categories_dict.keys()
-        )
+        categories_records = user.categoryread_set.filter(category__in=categories_dict.keys())
 
         for record in categories_records:
             category = categories_dict[record.category_id]
@@ -52,7 +47,9 @@ def start_record(user, category):
 
 
 def sync_record(user, category):
-    cutoff_date = user.joined_on
+    cutoff_date = get_cutoff_date()
+    if user.joined_on > cutoff_date:
+        cutoff_date = user.joined_on
 
     try:
         category_record = user.categoryread_set.get(category=category)
@@ -61,18 +58,14 @@ def sync_record(user, category):
     except CategoryRead.DoesNotExist:
         category_record = None
 
-    recorded_threads = category.thread_set.filter(last_post_on__gt=cutoff_date)
-    recorded_threads = exclude_invisible_threads(
-        user, [category], recorded_threads)
+    all_threads = category.thread_set.filter(last_post_on__gt=cutoff_date)
+    all_threads_count = exclude_invisible_threads(user, [category], all_threads).count()
 
-    all_threads_count = recorded_threads.count()
-
-    read_threads = user.threadread_set.filter(
+    read_threads_count = user.threadread_set.filter(
         category=category,
-        last_read_on__gt=cutoff_date
-    )
-    read_threads_count = read_threads.filter(
-        thread__last_post_on__lte=F("last_read_on")
+        thread__in=all_threads,
+        last_read_on__gt=cutoff_date,
+        thread__last_post_on__lte=F("last_read_on"),
     ).count()
 
     category_is_read = read_threads_count == all_threads_count
@@ -91,22 +84,23 @@ def sync_record(user, category):
             last_read_on = timezone.now()
         else:
             last_read_on = cutoff_date
-
         category_record = user.categoryread_set.create(
-            category=category,
-            last_read_on=last_read_on
+            category=category, last_read_on=last_read_on
         )
 
 
 def read_category(user, category):
-    categories = []
-    if category.level:
-        categories.append(category.pk)
+    categories = [category.pk]
     if not category.is_leaf_node():
-        queryset = category.get_descendants().filter(id__in=user.acl['visible_categories'])
-        categories += [c['id'] for c in queryset.values('id')]
+        categories += category.get_descendants().filter(
+            id__in=user.acl_cache['visible_categories'],
+        ).values_list(
+            'id',
+            flat=True,
+        )
 
     user.categoryread_set.filter(category_id__in=categories).delete()
+    user.threadread_set.filter(category_id__in=categories).delete()
 
     now = timezone.now()
     new_reads = []

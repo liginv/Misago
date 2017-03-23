@@ -1,7 +1,8 @@
+from django import forms
 from django.utils.translation import ugettext as _
 from django.utils.translation import ungettext
 
-from misago.core import forms
+from misago.core.forms import YesNoSwitch
 
 
 __ALL__ = ['ChangeSettingsForm']
@@ -19,30 +20,30 @@ class ValidateChoicesNum(object):
             message = ungettext(
                 'You have to select at least %(choices)d option.',
                 'You have to select at least %(choices)d options.',
-                self.min_choices)
-            message = message % {'choices': self.min_choices}
-            raise forms.ValidationError(message)
+                self.min_choices,
+            )
+            raise forms.ValidationError(message % {'choices': self.min_choices})
 
         if self.max_choices and self.max_choices < data_len:
             message = ungettext(
                 'You cannot select more than %(choices)d option.',
                 'You cannot select more than %(choices)d options.',
-                self.max_choices)
-            message = message % {'choices': self.max_choices}
-            raise forms.ValidationError(message)
+                self.max_choices,
+            )
+            raise forms.ValidationError(message % {'choices': self.max_choices})
 
         return data
 
 
 def basic_kwargs(setting, extra):
     kwargs = {
-        'label': setting.name,
+        'label': _(setting.name),
         'initial': setting.value,
         'required': extra.get('min_length') or extra.get('min'),
     }
 
     if setting.description:
-        kwargs['help_text'] = setting.description
+        kwargs['help_text'] = _(setting.description)
 
     if setting.form_field == 'yesno':
         # YesNoSwitch is int-base and setting is bool based
@@ -59,13 +60,16 @@ def basic_kwargs(setting, extra):
     return kwargs
 
 
+def localise_choices(extra):
+    return [(v, _(l)) for v, l in extra.get('choices', [])]
+
+
 def create_checkbox(setting, kwargs, extra):
     kwargs['widget'] = forms.CheckboxSelectMultiple()
-    kwargs['choices'] = extra.get('choices', [])
+    kwargs['choices'] = localise_choices(extra)
 
     if extra.get('min') or extra.get('max'):
-        kwargs['validators'] = [ValidateChoicesNum(extra.pop('min', 0),
-                                                   extra.pop('max', 0))]
+        kwargs['validators'] = [ValidateChoicesNum(extra.pop('min', 0), extra.pop('max', 0))]
 
     if setting.python_type == 'int':
         return forms.TypedMultipleChoiceField(coerce='int', **kwargs)
@@ -79,7 +83,7 @@ def create_choice(setting, kwargs, extra):
     else:
         kwargs['widget'] = forms.Select()
 
-    kwargs['choices'] = extra.get('choices', [])
+    kwargs['choices'] = localise_choices(extra)
 
     if setting.python_type == 'int':
         return forms.TypedChoiceField(coerce='int', **kwargs)
@@ -107,7 +111,7 @@ def create_textarea(setting, kwargs, extra):
 
 
 def create_yesno(setting, kwargs, extra):
-    return forms.YesNoSwitch(**kwargs)
+    return YesNoSwitch(**kwargs)
 
 
 FIELD_STYPES = {
@@ -122,25 +126,18 @@ FIELD_STYPES = {
 
 def setting_field(FormType, setting):
     field_factory = FIELD_STYPES[setting.form_field]
-
     field_extra = setting.field_extra
-    form_field = field_factory(setting,
-                               basic_kwargs(setting, field_extra),
-                               field_extra)
 
-    if setting.legend:
-        form_field.legend = setting.legend
+    form_field = field_factory(setting, basic_kwargs(setting, field_extra), field_extra)
 
-    FormType = type('FormType%s' % setting.pk, (FormType,),
-                    {setting.setting: form_field})
+    FormType = type('FormType%s' % setting.pk, (FormType, ), {setting.setting: form_field})
 
     return FormType
 
 
 def ChangeSettingsForm(data=None, group=None):
-    """
-    Factory method that builds valid form for settings group
-    """
+    """factory method that builds valid form for settings group"""
+
     class FormType(forms.Form):
         pass
 
@@ -152,8 +149,10 @@ def ChangeSettingsForm(data=None, group=None):
     for setting in group.setting_set.order_by('order'):
         if setting.legend and setting.legend != fieldset_legend:
             if fieldset_fields:
-                fieldsets.append(
-                    {'legend': fieldset_legend, 'form': fieldset_form(data)})
+                fieldsets.append({
+                    'legend': fieldset_legend,
+                    'form': fieldset_form(data),
+                })
             fieldset_legend = setting.legend
             fieldset_form = FormType
             fieldset_fields = False
@@ -161,7 +160,9 @@ def ChangeSettingsForm(data=None, group=None):
         fieldset_form = setting_field(fieldset_form, setting)
 
     if fieldset_fields:
-        fieldsets.append(
-            {'legend': fieldset_legend, 'form': fieldset_form(data)})
+        fieldsets.append({
+            'legend': fieldset_legend,
+            'form': fieldset_form(data),
+        })
 
     return fieldsets

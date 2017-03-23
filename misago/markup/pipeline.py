@@ -1,15 +1,15 @@
 from importlib import import_module
 
-from django.conf import settings
+from bs4 import BeautifulSoup
+
 from django.utils import six
 
-from bs4 import BeautifulSoup
+from misago.conf import settings
 
 
 class MarkupPipeline(object):
-    """
-    Small framework for extending parser
-    """
+    """small framework for extending parser"""
+
     def extend_markdown(self, md):
         for extension in settings.MISAGO_MARKUP_EXTENSIONS:
             module = import_module(extension)
@@ -29,5 +29,6 @@ class MarkupPipeline(object):
         souped_text = six.text_type(soup.body).strip()[6:-7]
         result['parsed_text'] = souped_text.strip()
         return result
+
 
 pipeline = MarkupPipeline()

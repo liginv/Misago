@@ -1,31 +1,28 @@
-import json
+from django.urls import reverse
 
-from django.core.urlresolvers import reverse
-from django.utils.encoding import smart_str
-
-from ..testutils import AuthenticatedUserTestCase, SuperUserTestCase, UserTestCase
+from misago.users.testutils import AuthenticatedUserTestCase, SuperUserTestCase, UserTestCase
 
 
 class UserTestCaseTests(UserTestCase):
     def test_get_anonymous_user(self):
         """get_anonymous_user returns anon user instance"""
         user = self.get_anonymous_user()
-        self.assertFalse(user.is_authenticated())
-        self.assertTrue(user.is_anonymous())
+        self.assertFalse(user.is_authenticated)
+        self.assertTrue(user.is_anonymous)
 
     def test_get_authenticated_user(self):
         """get_authenticated_user returns auth user instance"""
         user = self.get_authenticated_user()
-        self.assertTrue(user.is_authenticated())
-        self.assertFalse(user.is_anonymous())
+        self.assertTrue(user.is_authenticated)
+        self.assertFalse(user.is_anonymous)
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
 
     def test_get_superuser(self):
         """get_superuser returns auth user instance"""
         user = self.get_superuser()
-        self.assertTrue(user.is_authenticated())
-        self.assertFalse(user.is_anonymous())
+        self.assertTrue(user.is_authenticated)
+        self.assertFalse(user.is_anonymous)
         self.assertTrue(user.is_staff)
         self.assertTrue(user.is_superuser)
 
@@ -37,7 +34,7 @@ class UserTestCaseTests(UserTestCase):
         response = self.client.get('/api/auth/')
         self.assertEqual(response.status_code, 200)
 
-        user_json = json.loads(smart_str(response.content))
+        user_json = response.json()
         self.assertEqual(user_json['id'], user.id)
 
     def test_login_superuser(self):
@@ -48,7 +45,7 @@ class UserTestCaseTests(UserTestCase):
         response = self.client.get('/api/auth/')
         self.assertEqual(response.status_code, 200)
 
-        user_json = json.loads(smart_str(response.content))
+        user_json = response.json()
         self.assertEqual(user_json['id'], user.id)
 
     def test_logout_user(self):
@@ -60,7 +57,7 @@ class UserTestCaseTests(UserTestCase):
         response = self.client.get('/api/auth/')
         self.assertEqual(response.status_code, 200)
 
-        user_json = json.loads(smart_str(response.content))
+        user_json = response.json()
         self.assertIsNone(user_json['id'])
 
     def test_logout_superuser(self):
@@ -72,7 +69,7 @@ class UserTestCaseTests(UserTestCase):
         response = self.client.get('/api/auth/')
         self.assertEqual(response.status_code, 200)
 
-        user_json = json.loads(smart_str(response.content))
+        user_json = response.json()
         self.assertIsNone(user_json['id'])
 
 
@@ -99,5 +96,5 @@ class SuperUserTestCaseTests(SuperUserTestCase):
         response = self.client.get('/api/auth/')
         self.assertEqual(response.status_code, 200)
 
-        user_json = json.loads(smart_str(response.content))
+        user_json = response.json()
         self.assertEqual(user_json['id'], self.user.id)

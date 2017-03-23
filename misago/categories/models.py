@@ -12,10 +12,10 @@ from misago.core.cache import cache
 from misago.core.utils import slugify
 from misago.threads.threadtypes import trees_map
 
+from . import PRIVATE_THREADS_ROOT_NAME, THREADS_ROOT_NAME
+
 
 CACHE_NAME = 'misago_categories_tree'
-PRIVATE_THREADS_ROOT_NAME = 'private_threads'
-THREADS_ROOT_NAME = 'root_category'
 
 
 class CategoryManager(TreeManager):
@@ -64,7 +64,7 @@ class Category(MPTTModel):
         'self',
         null=True,
         blank=True,
-        related_name='children'
+        related_name='children',
     )
     special_role = models.CharField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)
@@ -79,7 +79,7 @@ class Category(MPTTModel):
         related_name='+',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.SET_NULL,
     )
     last_thread_title = models.CharField(max_length=255, null=True, blank=True)
     last_thread_slug = models.CharField(max_length=255, null=True, blank=True)
@@ -88,10 +88,13 @@ class Category(MPTTModel):
         related_name='+',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.SET_NULL,
     )
     last_poster_name = models.CharField(max_length=255, null=True, blank=True)
     last_poster_slug = models.CharField(max_length=255, null=True, blank=True)
+    require_threads_approval = models.BooleanField(default=False)
+    require_replies_approval = models.BooleanField(default=False)
+    require_edits_approval = models.BooleanField(default=False)
     prune_started_after = models.PositiveIntegerField(default=0)
     prune_replied_after = models.PositiveIntegerField(default=0)
     archive_pruned_in = models.ForeignKey(
@@ -99,21 +102,18 @@ class Category(MPTTModel):
         related_name='pruned_archive',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.SET_NULL,
     )
     css_class = models.CharField(max_length=255, null=True, blank=True)
 
     objects = CategoryManager()
 
-    @property
-    def thread_type(self):
-        return trees_map.get_type_for_tree_id(self.tree_id)
-
     def __str__(self):
         return six.text_type(self.thread_type.get_category_name(self))
 
-    def lock(self):
-        return Category.objects.select_for_update().get(id=self.id)
+    @property
+    def thread_type(self):
+        return trees_map.get_type_for_tree_id(self.tree_id)
 
     def delete(self, *args, **kwargs):
         Category.objects.clear_cache()

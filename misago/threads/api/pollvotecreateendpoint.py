@@ -1,19 +1,19 @@
 from copy import deepcopy
 
-from django.core.exceptions import ValidationError
-from django.utils import six
-from django.utils.translation import gettext as _, ungettext
-
 from rest_framework.response import Response
 
-from misago.acl import add_acl
+from django.core.exceptions import ValidationError
+from django.utils import six
+from django.utils.translation import gettext as _
+from django.utils.translation import ungettext
 
-from ..permissions.polls import allow_vote_poll
-from ..serializers import PollSerializer
+from misago.acl import add_acl
+from misago.threads.permissions import allow_vote_poll
+from misago.threads.serializers import PollSerializer
 
 
 def poll_vote_create(request, thread, poll):
-    poll.make_choices_votes_aware(request.user, poll.choices)
+    poll.make_choices_votes_aware(request.user)
 
     allow_vote_poll(request.user, poll)
 
@@ -46,7 +46,8 @@ def validate_votes(poll, votes):
             message = ungettext(
                 "This poll disallows voting for more than %(choices)s choice.",
                 "This poll disallows voting for more than %(choices)s choices.",
-                poll.allowed_choices)
+                poll.allowed_choices,
+            )
             raise ValidationError(message % {'choices': poll.allowed_choices})
     except TypeError:
         raise ValidationError(_("One or more of poll choices were invalid."))
@@ -94,5 +95,5 @@ def set_new_votes(request, poll, final_votes):
                 voter_name=request.user.username,
                 voter_slug=request.user.slug,
                 choice_hash=choice['hash'],
-                voter_ip=request.user_ip
+                voter_ip=request.user_ip,
             )

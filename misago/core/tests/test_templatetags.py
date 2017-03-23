@@ -1,9 +1,8 @@
+from django import forms
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import TestCase
 
-from .. import forms
-from ..shortcuts import paginate
-from ..templatetags import misago_batch
+from misago.core.templatetags import misago_batch
 
 
 class CaptureTests(TestCase):
@@ -46,12 +45,12 @@ class BatchTests(TestCase):
     def test_batch(self):
         """standard batch yields valid results"""
         batch = 'loremipsum'
-        yields = (
+        yields = [
             ['l', 'o', 'r'],
             ['e', 'm', 'i'],
             ['p', 's', 'u'],
             ['m'],
-        )
+        ]
 
         for i, test_yield in enumerate(misago_batch.batch(batch, 3)):
             self.assertEqual(test_yield, yields[i])
@@ -59,12 +58,12 @@ class BatchTests(TestCase):
     def test_batchnonefilled(self):
         """none-filled batch yields valid results"""
         batch = 'loremipsum'
-        yields = (
+        yields = [
             ['l', 'o', 'r'],
             ['e', 'm', 'i'],
             ['p', 's', 'u'],
             ['m', None, None],
-        )
+        ]
 
         for i, test_yield in enumerate(misago_batch.batchnonefilled(batch, 3)):
             self.assertEqual(test_yield, yields[i])
@@ -162,26 +161,6 @@ class MockUser(object):
     slug = "bob"
 
 
-class PaginationTests(TestCase):
-    def setUp(self):
-        self.page = paginate(range(500), 11, 20, 5)
-        self.context = Context({
-            'page': self.page,
-            'user': MockUser()
-        })
-
-    def _test_pagination(self):
-        """capture content to variable"""
-        tpl_content = """
-{% load misago_pagination %}
-
-{% pagination page "misago/user/pagination.html" 'misago:user_warnings' slug=user.slug pk=user.pk %}
-"""
-
-        tpl = Template(tpl_content)
-        tpl.render(self.context).strip()
-
-
 class ShorthandsTests(TestCase):
     def test_iftrue_for_true(self):
         """iftrue renders value for true"""
@@ -192,10 +171,7 @@ class ShorthandsTests(TestCase):
 """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'result': 'Ok!',
-            'value': True
-        })).strip(), 'Ok!')
+        self.assertEqual(tpl.render(Context({'result': 'Ok!', 'value': True})).strip(), 'Ok!')
 
     def test_iftrue_for_false(self):
         """iftrue isnt rendering value for false"""
@@ -206,10 +182,7 @@ class ShorthandsTests(TestCase):
 """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'result': 'Ok!',
-            'value': False
-        })).strip(), '')
+        self.assertEqual(tpl.render(Context({'result': 'Ok!', 'value': False})).strip(), '')
 
     def test_iffalse_for_true(self):
         """iffalse isnt rendering value for true"""
@@ -220,10 +193,7 @@ class ShorthandsTests(TestCase):
 """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'result': 'Ok!',
-            'value': True
-        })).strip(), '')
+        self.assertEqual(tpl.render(Context({'result': 'Ok!', 'value': True})).strip(), '')
 
     def test_iffalse_for_false(self):
         """iffalse renders value for false"""
@@ -234,15 +204,12 @@ class ShorthandsTests(TestCase):
 """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'result': 'Ok!',
-            'value': False
-        })).strip(), 'Ok!')
+        self.assertEqual(tpl.render(Context({'result': 'Ok!', 'value': False})).strip(), 'Ok!')
 
 
 class JSONTests(TestCase):
     def test_json_filter(self):
-        """as_json filter renders dict as json"""
+        """as_json filter renders dict as safe json"""
         tpl_content = """
 {% load misago_json %}
 
@@ -250,9 +217,13 @@ class JSONTests(TestCase):
 """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'value': {'he<llo': 'bo"b!'}
-        })).strip(), '{"he<llo": "bo\\"b!"}')
+        self.assertEqual(
+            tpl.render(Context({
+                'value': {
+                    'he</script>llo': 'bo"b!'
+                }
+            })).strip(), r'{"he\u003C/script>llo": "bo\"b!"}'
+        )
 
 
 class PageTitleTests(TestCase):
@@ -265,9 +236,7 @@ class PageTitleTests(TestCase):
         """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'item': 'Lorem Ipsum'
-        })).strip(), 'Lorem Ipsum')
+        self.assertEqual(tpl.render(Context({'item': 'Lorem Ipsum'})).strip(), 'Lorem Ipsum')
 
     def test_parent_title(self):
         """tag builds full title from title and parent name"""
@@ -278,10 +247,12 @@ class PageTitleTests(TestCase):
         """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'item': 'Lorem Ipsum',
-            'parent': 'Some Thread'
-        })).strip(), 'Lorem Ipsum | Some Thread')
+        self.assertEqual(
+            tpl.render(Context({
+                'item': 'Lorem Ipsum',
+                'parent': 'Some Thread',
+            })).strip(), 'Lorem Ipsum | Some Thread'
+        )
 
     def test_paged_title(self):
         """tag builds full title from title and page number"""
@@ -292,9 +263,11 @@ class PageTitleTests(TestCase):
         """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'item': 'Lorem Ipsum'
-        })).strip(), 'Lorem Ipsum (page: 3)')
+        self.assertEqual(
+            tpl.render(Context({
+                'item': 'Lorem Ipsum',
+            })).strip(), 'Lorem Ipsum (page: 3)'
+        )
 
     def test_kitchensink_title(self):
         """tag builds full title from all options"""
@@ -305,7 +278,9 @@ class PageTitleTests(TestCase):
         """
 
         tpl = Template(tpl_content)
-        self.assertEqual(tpl.render(Context({
-            'item': 'Lorem Ipsum',
-            'parent': 'Some Thread'
-        })).strip(), 'Lorem Ipsum (page: 3) | Some Thread')
+        self.assertEqual(
+            tpl.render(Context({
+                'item': 'Lorem Ipsum',
+                'parent': 'Some Thread',
+            })).strip(), 'Lorem Ipsum (page: 3) | Some Thread'
+        )

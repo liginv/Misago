@@ -4,17 +4,15 @@ from django.utils.translation import ugettext_lazy as _
 
 
 class MisagoACLPanel(Panel):
-    """
-    Panel that displays current user's ACL
-    """
-    title = _('Misago User ACL')
+    """panel that displays current user's ACL"""
+    title = _("Misago User ACL")
     template = 'misago/acl_debug.html'
 
     @property
     def nav_subtitle(self):
         misago_user = self.get_stats().get('misago_user')
 
-        if misago_user and misago_user.is_authenticated():
+        if misago_user and misago_user.is_authenticated:
             return misago_user.username
         else:
             return _("Anonymous user")
@@ -26,7 +24,7 @@ class MisagoACLPanel(Panel):
             misago_user = None
 
         try:
-            misago_acl = misago_user.acl
+            misago_acl = misago_user.acl_cache
         except AttributeError:
             misago_acl = {}
 

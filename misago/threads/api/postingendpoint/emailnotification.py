@@ -1,8 +1,8 @@
 from django.utils.translation import ugettext as _
 
 from misago.core.mail import build_mail, send_messages
+from misago.threads.permissions import can_see_post, can_see_thread
 
-from ...permissions.threads import can_see_thread, can_see_post
 from . import PostingEndpoint, PostingMiddleware
 
 
@@ -18,7 +18,7 @@ class EmailNotificationMiddleware(PostingMiddleware):
     def post_save(self, serializer):
         queryset = self.thread.subscription_set.filter(
             send_email=True,
-            last_read_on__gt=self.previous_last_post_on
+            last_read_on__gte=self.previous_last_post_on,
         ).exclude(user=self.user).select_related('user')
 
         notifications = []
@@ -30,7 +30,9 @@ class EmailNotificationMiddleware(PostingMiddleware):
             send_messages(notifications)
 
     def notify_user_of_post(self, subscriber):
-        return can_see_thread(subscriber, self.thread) and can_see_post(subscriber, self.post)
+        see_thread = can_see_thread(subscriber, self.thread)
+        see_post = can_see_post(subscriber, self.post)
+        return see_thread and see_post
 
     def build_mail(self, subscriber):
         if subscriber.id == self.thread.starter_id:
@@ -38,10 +40,7 @@ class EmailNotificationMiddleware(PostingMiddleware):
         else:
             subject = _('%(user)s has replied to thread "%(thread)s" that you are watching')
 
-        subject_formats = {
-            'user': self.user.username,
-            'thread': self.thread.title
-        }
+        subject_formats = {'user': self.user.username, 'thread': self.thread.title}
 
         return build_mail(
             self.request,
@@ -50,6 +49,6 @@ class EmailNotificationMiddleware(PostingMiddleware):
             'misago/emails/thread/reply',
             {
                 'thread': self.thread,
-                'post': self.post
-            }
+                'post': self.post,
+            },
         )

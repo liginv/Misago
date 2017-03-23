@@ -1,19 +1,21 @@
+from __future__ import unicode_literals
+
 import copy
 
 from django.contrib.postgres.fields import JSONField
-from django.core.urlresolvers import reverse
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
-from django.dispatch import receiver
 from django.utils import six, timezone
+from django.utils.encoding import python_2_unicode_compatible
 
 from misago.conf import settings
 from misago.core.utils import parse_iso8601_string
 from misago.markup import finalise_markup
+from misago.threads.checksums import is_post_valid, update_post_checksum
+from misago.threads.filtersearch import filter_search
 
-from .. import threadtypes
-from ..checksums import is_post_valid, update_post_checksum
 
-
+@python_2_unicode_compatible
 class Post(models.Model):
     category = models.ForeignKey('misago_categories.Category')
     thread = models.ForeignKey('misago_threads.Thread')
@@ -67,22 +69,38 @@ class Post(models.Model):
     event_type = models.CharField(max_length=255, null=True, blank=True)
     event_context = JSONField(null=True, blank=True)
 
+    likes = models.PositiveIntegerField(default=0)
+    last_likes = JSONField(null=True, blank=True)
+
+    liked_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='liked_post_set',
+        through='misago_threads.PostLike',
+    )
+
+    search_document = models.TextField(null=True, blank=True)
+    search_vector = SearchVectorField()
+
     class Meta:
         index_together = [
+            ('thread', 'id'),  # speed up threadview for team members
             ('is_event', 'is_hidden'),
-            ('poster', 'posted_on')
+            ('poster', 'posted_on'),
         ]
 
-    def __unicode__(self):
+    def __str__(self):
         return '%s...' % self.original[10:].strip()
 
     def delete(self, *args, **kwargs):
-        from ..signals import delete_post
+        from misago.threads.signals import delete_post
         delete_post.send(sender=self)
 
         super(Post, self).delete(*args, **kwargs)
 
     def merge(self, other_post):
+        if not self.poster_id or self.poster_id != other_post.poster_id:
+            raise ValueError("post can't be merged with other user's post")
+
         if self.thread_id != other_post.thread_id:
             raise ValueError("only posts belonging to same thread can be merged")
 
@@ -96,11 +114,11 @@ class Post(models.Model):
         other_post.parsed = six.text_type('\n').join((other_post.parsed, self.parsed))
         update_post_checksum(other_post)
 
-        from ..signals import merge_post
+        from misago.threads.signals import merge_post
         merge_post.send(sender=self, other_post=other_post)
 
     def move(self, new_thread):
-        from ..signals import move_post
+        from misago.threads.signals import move_post
 
         self.category = new_thread.category
         self.thread = new_thread
@@ -132,14 +150,32 @@ class Post(models.Model):
     def get_api_url(self):
         return self.thread_type.get_post_api_url(self)
 
+    def get_likes_api_url(self):
+        return self.thread_type.get_post_likes_api_url(self)
+
     def get_editor_api_url(self):
         return self.thread_type.get_post_editor_api_url(self)
+
+    def get_edits_api_url(self):
+        return self.thread_type.get_post_edits_api_url(self)
 
     def get_read_api_url(self):
         return self.thread_type.get_post_read_api_url(self)
 
     def get_absolute_url(self):
         return self.thread_type.get_post_absolute_url(self)
+
+    def set_search_document(self, thread_title=None):
+        if thread_title:
+            self.search_document = filter_search('\n\n'.join([thread_title, self.original]))
+        else:
+            self.search_document = filter_search(self.original)
+
+    def update_search_vector(self):
+        self.search_vector = SearchVector(
+            'search_document',
+            config=settings.MISAGO_SEARCH_CONFIG,
+        )
 
     @property
     def short(self):

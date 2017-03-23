@@ -1,10 +1,11 @@
 from hashlib import md5
 from time import time
 
-from django.conf import settings
 from django.contrib import auth as dj_auth
 from django.contrib import messages
 from django.utils.translation import ugettext as _
+
+from misago.conf import settings
 
 
 KEY_TOKEN = 'misago_admin_session_token'
@@ -18,10 +19,10 @@ def make_user_admin_token(user):
 
 # Admin session state controls
 def is_admin_session(request):
-    if request.user.is_anonymous():
+    if request.user.is_anonymous:
         return False
 
-    if not (request.user.is_staff and request.user.is_superuser):
+    if not request.user.is_staff:
         return False
 
     admin_token = request.session.get(KEY_TOKEN)
@@ -66,9 +67,13 @@ def django_login_handler(sender, **kwargs):
         admin_namespace = False
     if admin_namespace and user.is_staff:
         start_admin_session(request, user)
+
+
 dj_auth.signals.user_logged_in.connect(django_login_handler)
 
 
 def django_logout_handler(sender, **kwargs):
     close_admin_session(kwargs['request'])
+
+
 dj_auth.signals.user_logged_out.connect(django_logout_handler)

@@ -1,6 +1,6 @@
 from django.contrib import messages
-from django.core.urlresolvers import reverse
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
 from misago.admin.views import generic
@@ -11,13 +11,13 @@ from .models import Role
 
 class RoleAdmin(generic.AdminBaseMixin):
     root_link = 'misago:admin:permissions:users:index'
-    Model = Role
+    model = Role
     templates_dir = 'misago/admin/roles'
     message_404 = _("Requested role does not exist.")
 
 
 class RolesList(RoleAdmin, generic.ListView):
-    ordering = (('name', None),)
+    ordering = (('name', None), )
 
 
 class RoleFormMixin(object):
@@ -43,8 +43,7 @@ class RoleFormMixin(object):
                 form.instance.permissions = new_permissions
                 form.instance.save()
 
-                messages.success(
-                    request, self.message_submit % {'name': target.name})
+                messages.success(request, self.message_submit % {'name': target.name})
 
                 if 'stay' in request.POST:
                     return redirect(request.path)
@@ -54,12 +53,12 @@ class RoleFormMixin(object):
                 form.add_error(None, _("Form contains errors."))
 
         return self.render(
-            request,
-            {
+            request, {
                 'form': form,
                 'target': target,
                 'perms_forms': perms_forms,
-            })
+            }
+        )
 
 
 class NewRole(RoleFormMixin, RoleAdmin, generic.ModelFormView):
@@ -73,8 +72,7 @@ class EditRole(RoleFormMixin, RoleAdmin, generic.ModelFormView):
 class DeleteRole(RoleAdmin, generic.ButtonView):
     def check_permissions(self, request, target):
         if target.special_role:
-            message = _('Role "%(name)s" is special role '
-                        'and can\'t be deleted.')
+            message = _('Role "%(name)s" is special role and can\'t be deleted.')
             return message % {'name': target.name}
 
     def button_action(self, request, target):

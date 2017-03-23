@@ -5,46 +5,21 @@ import SelectionControls from 'misago/components/threads/moderation/selection'; 
 
 export default class extends React.Component {
   getCategoryPicker() {
-    if (this.props.subcategories.length) {
-      /* jshint ignore:start */
-      return <div className="toolbar-left">
-        <CategoryPicker choices={this.props.subcategories}
-                        categories={this.props.categoriesMap}
-                        list={this.props.list} />
-      </div>;
-      /* jshint ignore:end */
-    } else {
-      return null;
-    }
+    if (!this.props.subcategories.length) return null;
+
+    /* jshint ignore:start */
+    return (
+      <CategoryPicker
+        categories={this.props.categoriesMap}
+        choices={this.props.subcategories}
+        list={this.props.list}
+      />
+    );
+    /* jshint ignore:end */
   }
 
   showModerationOptions() {
     return this.props.user.id && this.props.moderation.allow;
-  }
-
-  getSelectionButton() {
-    if (this.showModerationOptions()) {
-      /* jshint ignore:start */
-      return <div className="toolbar-right dropdown">
-        <button type="button"
-                className="btn btn-default btn-icon dropdown-toggle"
-                data-toggle="dropdown"
-                aria-haspopup="true"
-                aria-expanded="false"
-                disabled={this.props.disabled}>
-          <span className="material-icon">
-            select_all
-          </span>
-        </button>
-
-        <SelectionControls className="dropdown-menu dropdown-menu-right"
-                           threads={this.props.threads} />
-
-      </div>;
-      /* jshint ignore:end */
-    } else {
-      return null;
-    }
   }
 
   getSelectedThreads() {
@@ -54,26 +29,30 @@ export default class extends React.Component {
   }
 
   getModerationButton() {
-    if (this.showModerationOptions()) {
-      /* jshint ignore:start */
-      return <div className="toolbar-right dropdown">
-        <button type="button"
-                className="btn btn-default dropdown-toggle"
-                data-toggle="dropdown"
-                aria-haspopup="true"
-                aria-expanded="false"
-                disabled={this.props.disabled || !this.props.selection.length}>
+    if (!this.showModerationOptions()) return null;
+
+    /* jshint ignore:start */
+    return (
+      <div className="col-xs-6 col-sm-3 col-md-2 dropdown">
+        <button
+          type="button"
+          className="btn btn-default dropdown-toggle btn-block"
+          data-toggle="dropdown"
+          aria-haspopup="true"
+          aria-expanded="false"
+          disabled={this.props.disabled || !this.props.selection.length}
+        >
           <span className="material-icon">
             settings
           </span>
-          {gettext("Moderation")}
+          {gettext("Options")}
         </button>
 
         <ModerationControls
           addThreads={this.props.addThreads}
           categories={this.props.categories}
           categoriesMap={this.props.categoriesMap}
-          className="dropdown-menu dropdown-menu-right"
+          className="dropdown-menu dropdown-menu-right stick-to-bottom"
           deleteThread={this.props.deleteThread}
           freezeThread={this.props.freezeThread}
           moderation={this.props.moderation}
@@ -83,23 +62,51 @@ export default class extends React.Component {
           user={this.props.user}
         />
 
-      </div>;
-      /* jshint ignore:end */
-    } else {
-      return null;
-    }
+      </div>
+    );
+    /* jshint ignore:end */
+  }
+
+  getSelectionButton() {
+    if (!this.showModerationOptions()) return null;
+
+    /* jshint ignore:start */
+    return (
+      <div className="col-xs-3 col-sm-2 col-md-1 dropdown">
+        <button
+          type="button"
+          className="btn btn-default btn-icon dropdown-toggle btn-block"
+          data-toggle="dropdown"
+          aria-haspopup="true"
+          aria-expanded="false"
+          disabled={this.props.disabled}
+        >
+          <span className="material-icon">
+            select_all
+          </span>
+        </button>
+
+        <SelectionControls
+          className="dropdown-menu dropdown-menu-right stick-to-bottom"
+          threads={this.props.threads}
+        />
+      </div>
+    );
+    /* jshint ignore:end */
   }
 
   render() {
     /* jshint ignore:start */
-    return <div className="toolbar with-js">
-      {this.getCategoryPicker()}
-      <p className="toolbar-left hidden-xs hidden-sm">
-        {this.props.children}
-      </p>
-      {this.getSelectionButton()}
-      {this.getModerationButton()}
-    </div>;
+    return (
+      <div className="row row-toolbar row-toolbar-bottom-margin">
+        <div className="col-xs-3 col-sm-3 col-md-2 dropdown">
+          {this.getCategoryPicker()}
+        </div>
+        <div className="hidden-xs col-sm-4 col-md-7" />
+        {this.getModerationButton()}
+        {this.getSelectionButton()}
+      </div>
+    );
     /* jshint ignore:end */
   }
 }

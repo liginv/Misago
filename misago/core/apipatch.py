@@ -1,8 +1,8 @@
+from rest_framework.response import Response
+
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404
-
-from rest_framework.response import Response
 
 
 ALLOWED_OPS = ('add', 'remove', 'replace')
@@ -40,7 +40,7 @@ class ApiPatch(object):
     def dispatch(self, request, target):
         if not isinstance(request.data, list):
             return Response({
-                'detail': "PATCH request should be list of operations"
+                'detail': "PATCH request should be list of operations",
             }, status=400)
 
         detail = []

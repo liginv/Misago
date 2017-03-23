@@ -1,13 +1,11 @@
 from importlib import import_module
 
-from django.conf import settings
+from misago.conf import settings
 
 
-__ALL__ = ['providers']
-
-
-# Manager for permission providers
 class PermissionProviders(object):
+    """manager for permission providers"""
+
     def __init__(self):
         self._initialized = False
         self._providers = []
@@ -36,15 +34,11 @@ class PermissionProviders(object):
             types_dict[hashType] = tuple(types_dict[hashType])
 
     def acl_annotator(self, hashable_type, func):
-        """
-        registers ACL annotator for specified types
-        """
+        """registers ACL annotator for specified types"""
         self._annotators.setdefault(hashable_type, []).append(func)
 
     def acl_serializer(self, hashable_type, func):
-        """
-        registers ACL serializer for specified types
-        """
+        """registers ACL serializer for specified types"""
         self._serializers.setdefault(hashable_type, []).append(func)
 
     def get_type_annotators(self, obj):

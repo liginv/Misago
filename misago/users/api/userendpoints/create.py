@@ -1,22 +1,19 @@
-from django.contrib.auth import authenticate, get_user_model, login
-from django.core.exceptions import PermissionDenied
-from django.utils.translation import ugettext as _
-from django.views.decorators.csrf import csrf_protect
-
 from rest_framework import status
 from rest_framework.response import Response
 
-from misago.conf import settings
-from misago.core import forms
-from misago.core.mail import mail_user
+from django.contrib.auth import authenticate, get_user_model, login
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.utils.translation import ugettext as _
+from django.views.decorators.csrf import csrf_protect
 
-from ... import captcha
-from ...bans import ban_ip
-from ...forms.register import RegisterForm
-from ...models import ACTIVATION_REQUIRED_ADMIN, ACTIVATION_REQUIRED_USER
-from ...serializers import AuthenticatedUserSerializer
-from ...tokens import make_activation_token
-from ...validators import validate_new_registration
+from misago.conf import settings
+from misago.core.mail import mail_user
+from misago.users import captcha
+from misago.users.forms.register import RegisterForm
+from misago.users.tokens import make_activation_token
+
+
+UserModel = get_user_model()
 
 
 @csrf_protect
@@ -24,48 +21,23 @@ def create_endpoint(request):
     if settings.account_activation == 'closed':
         raise PermissionDenied(_("New users registrations are currently closed."))
 
-    form = RegisterForm(request.data)
+    form = RegisterForm(request.data, request=request)
 
     try:
         captcha.test_request(request)
-    except forms.ValidationError as e:
+    except ValidationError as e:
         form.add_error('captcha', e)
 
     if not form.is_valid():
         return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        validate_new_registration(
-            request.user_ip,
-            form.cleaned_data['username'],
-            form.cleaned_data['email'])
-    except PermissionDenied:
-        staff_message = _("This ban was automatically imposed on "
-                          "%(date)s due to denied registration attempt.")
-
-        message_formats = {'date': date_format(timezone.now())}
-        staff_message = staff_message % message_formats
-        ban_ip(
-            request.user_ip,
-            staff_message=staff_message,
-            length={'days': 14}
-        )
-
-        raise PermissionDenied(
-            _("Your IP address is banned from registering on this site."))
-
     activation_kwargs = {}
     if settings.account_activation == 'user':
-        activation_kwargs = {
-            'requires_activation': ACTIVATION_REQUIRED_USER
-        }
+        activation_kwargs = {'requires_activation': UserModel.ACTIVATION_USER}
     elif settings.account_activation == 'admin':
-        activation_kwargs = {
-            'requires_activation': ACTIVATION_REQUIRED_ADMIN
-        }
+        activation_kwargs = {'requires_activation': UserModel.ACTIVATION_ADMIN}
 
-    User = get_user_model()
-    new_user = User.objects.create_user(
+    new_user = UserModel.objects.create_user(
         form.cleaned_data['username'],
         form.cleaned_data['email'],
         form.cleaned_data['password'],
@@ -79,12 +51,11 @@ def create_endpoint(request):
 
     if settings.account_activation == 'none':
         authenticated_user = authenticate(
-            username=new_user.email,
-            password=form.cleaned_data['password'])
+            username=new_user.email, password=form.cleaned_data['password']
+        )
         login(request, authenticated_user)
 
-        mail_user(request, new_user, mail_subject,
-                  'misago/emails/register/complete')
+        mail_user(request, new_user, mail_subject, 'misago/emails/register/complete')
 
         return Response({
             'activation': 'active',
@@ -98,13 +69,12 @@ def create_endpoint(request):
         activation_by_user = new_user.requires_activation_by_user
 
         mail_user(
-            request, new_user, mail_subject,
-            'misago/emails/register/inactive',
-            {
+            request, new_user, mail_subject, 'misago/emails/register/inactive', {
                 'activation_token': activation_token,
                 'activation_by_admin': activation_by_admin,
                 'activation_by_user': activation_by_user,
-            })
+            }
+        )
 
         if activation_by_admin:
             activation_method = 'admin'

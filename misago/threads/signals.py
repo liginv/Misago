@@ -8,7 +8,7 @@ from misago.categories.signals import delete_category_content, move_category_con
 from misago.core.pgutils import batch_delete, batch_update
 from misago.users.signals import delete_user_content, username_changed
 
-from .models import Attachment, Post, Thread, Poll, PollVote
+from .models import Attachment, Poll, PollVote, Post, PostEdit, PostLike, Thread
 
 
 delete_post = Signal()
@@ -17,16 +17,15 @@ merge_post = Signal(providing_args=["other_post"])
 merge_thread = Signal(providing_args=["other_thread"])
 move_post = Signal()
 move_thread = Signal()
-remove_thread_participant = Signal(providing_args=["user"])
 
 
-"""
-Signal handlers
-"""
 @receiver(merge_thread)
 def merge_threads_posts(sender, **kwargs):
     other_thread = kwargs['other_thread']
-    other_thread.post_set.update(category=sender.category, thread=sender)
+    other_thread.post_set.update(
+        category=sender.category,
+        thread=sender,
+    )
 
 
 @receiver(merge_post)
@@ -39,11 +38,22 @@ def merge_posts(sender, **kwargs):
 @receiver(move_thread)
 def move_thread_content(sender, **kwargs):
     sender.post_set.update(category=sender.category)
+    sender.postedit_set.update(category=sender.category)
+    sender.postlike_set.update(category=sender.category)
+    sender.pollvote_set.update(category=sender.category)
+    sender.subscription_set.update(category=sender.category)
+
+    Poll.objects.filter(thread=sender).update(category=sender.category)
 
 
 @receiver(delete_category_content)
 def delete_category_threads(sender, **kwargs):
+    sender.subscription_set.all().delete()
+    sender.pollvote_set.all().delete()
+    sender.poll_set.all().delete()
+    sender.postlike_set.all().delete()
     sender.thread_set.all().delete()
+    sender.postedit_set.all().delete()
     sender.post_set.all().delete()
 
 
@@ -51,10 +61,13 @@ def delete_category_threads(sender, **kwargs):
 def move_category_threads(sender, **kwargs):
     new_category = kwargs['new_category']
 
-    Thread.objects.filter(category=sender).update(category=new_category)
-    Post.objects.filter(category=sender).update(category=new_category)
-    Poll.objects.filter(category=sender).update(category=new_category)
-    PollVote.objects.filter(category=sender).update(category=new_category)
+    sender.thread_set.update(category=new_category)
+    sender.post_set.filter(category=sender).update(category=new_category)
+    sender.postedit_set.filter(category=sender).update(category=new_category)
+    sender.postlike_set.filter(category=sender).update(category=new_category)
+    sender.poll_set.filter(category=sender).update(category=new_category)
+    sender.pollvote_set.update(category=new_category)
+    sender.subscription_set.update(category=new_category)
 
 
 @receiver(delete_user_content)
@@ -89,40 +102,52 @@ def delete_user_threads(sender, **kwargs):
 def update_usernames(sender, **kwargs):
     Thread.objects.filter(starter=sender).update(
         starter_name=sender.username,
-        starter_slug=sender.slug
+        starter_slug=sender.slug,
     )
 
     Thread.objects.filter(last_poster=sender).update(
         last_poster_name=sender.username,
-        last_poster_slug=sender.slug
+        last_poster_slug=sender.slug,
     )
 
-    Post.objects.filter(poster=sender).update(poster_name=sender.username)
+    Post.objects.filter(poster=sender).update(
+        poster_name=sender.username,
+    )
 
     Post.objects.filter(last_editor=sender).update(
         last_editor_name=sender.username,
-        last_editor_slug=sender.slug
+        last_editor_slug=sender.slug,
+    )
+
+    PostEdit.objects.filter(editor=sender).update(
+        editor_name=sender.username,
+        editor_slug=sender.slug,
+    )
+
+    PostLike.objects.filter(liker=sender).update(
+        liker_name=sender.username,
+        liker_slug=sender.slug,
     )
 
     Attachment.objects.filter(uploader=sender).update(
         uploader_name=sender.username,
-        uploader_slug=sender.slug
+        uploader_slug=sender.slug,
     )
 
     Poll.objects.filter(poster=sender).update(
         poster_name=sender.username,
-        poster_slug=sender.slug
+        poster_slug=sender.slug,
     )
 
     PollVote.objects.filter(voter=sender).update(
         voter_name=sender.username,
-        voter_slug=sender.slug
+        voter_slug=sender.slug,
     )
 
 
 @receiver(pre_delete, sender=get_user_model())
 def remove_unparticipated_private_threads(sender, **kwargs):
-    threads_qs = kwargs['instance'].private_thread_set.all()
+    threads_qs = kwargs['instance'].privatethread_set.all()
     for thread in batch_update(threads_qs, 50):
         if thread.participants.count() == 1:
             with transaction.atomic():

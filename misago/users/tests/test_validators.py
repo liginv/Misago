@@ -1,31 +1,22 @@
 #-*- coding: utf-8 -*-
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from misago.conf import settings
+from misago.users.models import Ban
+from misago.users.validators import (
+    validate_email, validate_email_available, validate_email_banned, validate_gmail_email,
+    validate_username, validate_username_available, validate_username_banned,
+    validate_username_content, validate_username_length)
 
-from ..models import BAN_EMAIL, BAN_USERNAME, Ban
-from ..validators import (
-    validate_email,
-    validate_email_available,
-    validate_email_banned,
-    validate_gmail_email,
-    validate_password,
-    validate_username,
-    validate_username_available,
-    validate_username_banned,
-    validate_username_content,
-    validate_username_length
-)
+
+UserModel = get_user_model()
 
 
 class ValidateEmailAvailableTests(TestCase):
     def setUp(self):
-        User = get_user_model()
-        self.test_user = User.objects.create_user('EricTheFish',
-                                                  'eric@test.com',
-                                                  'pass123')
+        self.test_user = UserModel.objects.create_user('EricTheFish', 'eric@test.com', 'pass123')
 
     def test_valid_email(self):
         """validate_email_available allows available emails"""
@@ -40,7 +31,10 @@ class ValidateEmailAvailableTests(TestCase):
 
 class ValidateEmailBannedTests(TestCase):
     def setUp(self):
-        Ban.objects.create(check_type=BAN_EMAIL, banned_value="ban@test.com")
+        Ban.objects.create(
+            check_type=Ban.EMAIL,
+            banned_value="ban@test.com",
+        )
 
     def test_unbanned_name(self):
         """unbanned email passes validation"""
@@ -60,17 +54,6 @@ class ValidateEmailTests(TestCase):
             validate_email('*')
 
 
-class ValidatePasswordTests(TestCase):
-    def test_valid_password(self):
-        """validate_password allows valid password"""
-        validate_password('A' * (settings.password_length_min + 1))
-
-    def test_invalid_name(self):
-        """validate_password disallows invalid password"""
-        with self.assertRaises(ValidationError):
-            validate_password('A' * (settings.password_length_min - 1))
-
-
 class ValidateUsernameTests(TestCase):
     def test_validate_username(self):
         """validate_username has no crashes"""
@@ -81,16 +64,12 @@ class ValidateUsernameTests(TestCase):
 
 class ValidateUsernameAvailableTests(TestCase):
     def setUp(self):
-        User = get_user_model()
-        self.test_user = User.objects.create_user('EricTheFish',
-                                                  'eric@test.com',
-                                                  'pass123')
+        self.test_user = UserModel.objects.create_user('EricTheFish', 'eric@test.com', 'pass123')
 
     def test_valid_name(self):
         """validate_username_available allows available names"""
         validate_username_available('BobBoberson')
-        validate_username_available(self.test_user.username,
-                                    exclude=self.test_user)
+        validate_username_available(self.test_user.username, exclude=self.test_user)
 
     def test_invalid_name(self):
         """validate_username_available disallows unvailable names"""
@@ -100,7 +79,10 @@ class ValidateUsernameAvailableTests(TestCase):
 
 class ValidateUsernameBannedTests(TestCase):
     def setUp(self):
-        Ban.objects.create(check_type=BAN_USERNAME, banned_value="Bob")
+        Ban.objects.create(
+            check_type=Ban.USERNAME,
+            banned_value="Bob",
+        )
 
     def test_unbanned_name(self):
         """unbanned name passes validation"""
@@ -147,11 +129,25 @@ class ValidateUsernameLengthTests(TestCase):
             validate_username_length('a' * (settings.username_length_max + 1))
 
 
+class MockForm(object):
+    def __init__(self):
+        self.errors = {}
+
+    def add_error(self, field, error):
+        self.errors[field] = error
+
+
 class ValidateGmailEmailTests(TestCase):
     def test_validate_gmail_email(self):
         """validate_gmail_email spots spammy gmail address"""
-        validate_gmail_email('', '', 'the.bob.boberson@gmail.com')
-        validate_gmail_email('', '', 'the.bob.boberson@hotmail.com')
+        form = MockForm()
 
-        with self.assertRaises(PermissionDenied):
-            validate_gmail_email('', '', 'the.b.o.b.b.ob.e.r.son@gmail.com')
+        validate_gmail_email(None, form, {})
+        validate_gmail_email(None, form, {'email': 'invalid-email'})
+        validate_gmail_email(None, form, {'email': 'the.bob.boberson@gmail.com'})
+        validate_gmail_email(None, form, {'email': 'the.bob.boberson@hotmail.com'})
+
+        self.assertFalse(form.errors)
+
+        validate_gmail_email(None, form, {'email': 'the.b.o.b.b.ob.e.r.son@gmail.com'})
+        self.assertTrue(form.errors)

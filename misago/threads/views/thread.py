@@ -1,9 +1,8 @@
-from django.core.urlresolvers import reverse
 from django.shortcuts import render
+from django.urls import reverse
 from django.views.generic import View
 
-from ..viewmodels.posts import ThreadPosts
-from ..viewmodels.thread import ForumThread
+from misago.threads.viewmodels import ForumThread, PrivateThread, ThreadPosts
 
 
 class ThreadBase(View):
@@ -23,7 +22,9 @@ class ThreadBase(View):
         return render(request, self.template_name, template_context)
 
     def get_thread(self, request, pk, slug):
-        return self.thread(request, pk, slug, read_aware=True, subscription_aware=True)
+        return self.thread(
+            request, pk, slug, read_aware=True, subscription_aware=True, poll_votes_aware=True
+        )
 
     def get_posts(self, request, thread, page):
         return self.posts(request, thread, page)
@@ -43,7 +44,9 @@ class ThreadBase(View):
 
     def get_template_context(self, request, thread, posts):
         context = {
-            'url_name': ':'.join(request.resolver_match.namespaces + [request.resolver_match.url_name])
+            'url_name': ':'.join(request.resolver_match.namespaces + [
+                request.resolver_match.url_name,
+            ])
         }
 
         context.update(thread.get_template_context())
@@ -52,15 +55,16 @@ class ThreadBase(View):
         return context
 
 
-class Thread(ThreadBase):
+class ThreadView(ThreadBase):
     thread = ForumThread
     template_name = 'misago/thread/thread.html'
 
     def get_default_frontend_context(self):
         return {
-            'THREADS_API': reverse('misago:api:thread-list')
+            'THREADS_API': reverse('misago:api:thread-list'),
         }
 
 
-class PrivateThread(ThreadBase):
+class PrivateThreadView(ThreadBase):
+    thread = PrivateThread
     template_name = 'misago/thread/private_thread.html'

@@ -1,37 +1,31 @@
-from django.db import models, transaction
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import models
+from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
 from misago.conf import settings
 from misago.core.utils import slugify
 
 
-__all__ = [
-    'THREAD_WEIGHT_DEFAULT',
-    'THREAD_WEIGHT_PINNED',
-    'THREAD_WEIGHT_GLOBAL',
-    'THREAD_WEIGHT_CHOICES',
-
-    'Thread',
-]
-
-
-THREAD_WEIGHT_DEFAULT = 0
-THREAD_WEIGHT_PINNED = 1
-THREAD_WEIGHT_GLOBAL = 2
-
-THREAD_WEIGHT_CHOICES = (
-    (THREAD_WEIGHT_DEFAULT, _("Don't pin thread")),
-    (THREAD_WEIGHT_PINNED, _("Pin thread within category")),
-    (THREAD_WEIGHT_GLOBAL, _("Pin thread globally"))
-)
-
-
+@python_2_unicode_compatible
 class Thread(models.Model):
+    WEIGHT_DEFAULT = 0
+    WEIGHT_PINNED = 1
+    WEIGHT_GLOBAL = 2
+
+    WEIGHT_CHOICES = [
+        (WEIGHT_DEFAULT, _("Don't pin thread")),
+        (WEIGHT_PINNED, _("Pin thread within category")),
+        (WEIGHT_GLOBAL, _("Pin thread globally")),
+    ]
+
     category = models.ForeignKey('misago_categories.Category')
     title = models.CharField(max_length=255)
     slug = models.CharField(max_length=255)
     replies = models.PositiveIntegerField(default=0, db_index=True)
 
+    has_events = models.BooleanField(default=False)
+    has_poll = models.BooleanField(default=False)
     has_reported_posts = models.BooleanField(default=False)
     has_open_reports = models.BooleanField(default=False)
     has_unapproved_posts = models.BooleanField(default=False)
@@ -45,13 +39,13 @@ class Thread(models.Model):
         related_name='+',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.SET_NULL,
     )
     starter = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.SET_NULL,
     )
     starter_name = models.CharField(max_length=255)
     starter_slug = models.CharField(max_length=255)
@@ -61,30 +55,30 @@ class Thread(models.Model):
         related_name='+',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.SET_NULL,
     )
+    last_post_is_event = models.BooleanField(default=False)
     last_poster = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name='last_poster_set',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.SET_NULL,
     )
     last_poster_name = models.CharField(max_length=255, null=True, blank=True)
     last_poster_slug = models.CharField(max_length=255, null=True, blank=True)
 
-    weight = models.PositiveIntegerField(default=THREAD_WEIGHT_DEFAULT)
+    weight = models.PositiveIntegerField(default=WEIGHT_DEFAULT)
 
-    is_poll = models.BooleanField(default=False)
     is_unapproved = models.BooleanField(default=False, db_index=True)
     is_hidden = models.BooleanField(default=False)
     is_closed = models.BooleanField(default=False)
 
     participants = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        related_name='private_thread_set',
+        related_name='privatethread_set',
         through='ThreadParticipant',
-        through_fields=('thread', 'user')
+        through_fields=('thread', 'user'),
     )
 
     class Meta:
@@ -94,14 +88,14 @@ class Thread(models.Model):
             ['category', 'replies'],
         ]
 
-    def __unicode__(self):
+    def __str__(self):
         return self.title
 
     def lock(self):
         return Thread.objects.select_for_update().get(id=self.id)
 
     def delete(self, *args, **kwargs):
-        from ..signals import delete_thread
+        from misago.threads.signals import delete_thread
         delete_thread.send(sender=self)
 
         super(Thread, self).delete(*args, **kwargs)
@@ -110,17 +104,23 @@ class Thread(models.Model):
         if self.pk == other_thread.pk:
             raise ValueError("thread can't be merged with itself")
 
-        from ..signals import merge_thread
+        from misago.threads.signals import merge_thread
         merge_thread.send(sender=self, other_thread=other_thread)
 
     def move(self, new_category):
-        from ..signals import move_thread
+        from misago.threads.signals import move_thread
 
         self.category = new_category
         move_thread.send(sender=self)
 
     def synchronize(self):
+        try:
+            self.has_poll = bool(self.poll)
+        except ObjectDoesNotExist:
+            self.has_poll = False
+
         self.replies = self.post_set.filter(is_event=False, is_unapproved=False).count()
+
         if self.replies > 0:
             self.replies -= 1
 
@@ -139,15 +139,23 @@ class Thread(models.Model):
         hidden_post_qs = self.post_set.filter(is_hidden=True)[:1]
         self.has_hidden_posts = hidden_post_qs.exists()
 
-        first_post = self.post_set.order_by('id')[:1][0]
+        posts = self.post_set.order_by('id')
+
+        first_post = posts.first()
         self.set_first_post(first_post)
 
-        last_post_qs = self.post_set.filter(is_unapproved=False).order_by('-id')
-        last_post = last_post_qs[:1]
+        last_post = posts.filter(is_unapproved=False).last()
         if last_post:
-            self.set_last_post(last_post[0])
+            self.set_last_post(last_post)
         else:
             self.set_last_post(first_post)
+
+        self.has_events = False
+        if last_post:
+            if last_post.is_event:
+                self.has_events = True
+            else:
+                self.has_events = self.post_set.filter(is_event=True).exists()
 
     @property
     def thread_type(self):
@@ -208,6 +216,7 @@ class Thread(models.Model):
 
     def set_last_post(self, post):
         self.last_post_on = post.posted_on
+        self.last_post_is_event = post.is_event
         self.last_post = post
         self.last_poster = post.poster
         self.last_poster_name = post.poster_name

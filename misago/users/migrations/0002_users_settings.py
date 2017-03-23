@@ -1,21 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from django.conf import settings
-from django.db import migrations, models
-from django.utils.translation import ugettext as _
+from django.db import migrations
 
 from misago.conf.migrationutils import migrate_settings_group
 
 
+_ = lambda x: x
+
+
 def create_users_settings_group(apps, schema_editor):
     migrate_settings_group(
-        apps,
-        {
+        apps, {
             'key': 'users',
             'name': _("Users"),
-            'description': _("Those settings control user accounts default behaviour and features availability."),
-            'settings': (
+            'description': _(
+                "Those settings control user accounts default behaviour and features availability."
+            ),
+            'settings': [
                 {
                     'setting': 'account_activation',
                     'name': _("New accounts activation"),
@@ -23,12 +25,12 @@ def create_users_settings_group(apps, schema_editor):
                     'value': 'none',
                     'form_field': 'select',
                     'field_extra': {
-                        'choices': (
+                        'choices': [
                             ('none', _("No activation required")),
-                            ('user', _("Activation Token sent to User")),
-                            ('admin', _("Activation by Administrator")),
-                            ('closed', _("Don't allow new registrations"))
-                        )
+                            ('user', _("Activation token sent to User")),
+                            ('admin', _("Activation by administrator")),
+                            ('closed', _("Don't allow new registrations")),
+                        ],
                     },
                     'is_public': True,
                 },
@@ -74,10 +76,12 @@ def create_users_settings_group(apps, schema_editor):
                     'setting': 'allow_custom_avatars',
                     'name': _("Allow custom avatars"),
                     'legend': _("Avatars"),
-                    'description': _("Turning this option off will forbid "
-                                     "forum users from using avatars from "
-                                     "outside forums. Good for forums "
-                                     "adressed at young users."),
+                    'description': _(
+                        "Turning this option off will forbid "
+                        "forum users from using avatars from "
+                        "outside forums. Good for forums "
+                        "adressed at young users."
+                    ),
                     'python_type': 'bool',
                     'value': True,
                     'form_field': 'yesno',
@@ -88,35 +92,35 @@ def create_users_settings_group(apps, schema_editor):
                     'value': 'gravatar',
                     'form_field': 'select',
                     'field_extra': {
-                        'choices': (
+                        'choices': [
                             ('dynamic', _("Individual")),
                             ('gravatar', _("Gravatar")),
                             ('gallery', _("Random avatar from gallery")),
-                        ),
+                        ],
                     },
                 },
                 {
                     'setting': 'default_gravatar_fallback',
                     'name': _("Fallback for default gravatar"),
-                    'description': _("Select which avatar to use when user "
-                                     "has no gravatar associated with his "
-                                     "e-mail address."),
+                    'description': _(
+                        "Select which avatar to use when user has no "
+                        "gravatar associated with his e-mail address."
+                    ),
                     'value': 'dynamic',
                     'form_field': 'select',
                     'field_extra': {
-                        'choices': (
+                        'choices': [
                             ('dynamic', _("Individual")),
                             ('gallery', _("Random avatar from gallery")),
-                        ),
+                        ],
                     },
                 },
                 {
                     'setting': 'avatar_upload_limit',
                     'name': _("Maximum size of uploaded avatar"),
-                    'description': _("Enter maximum allowed file size "
-                                     "(in KB) for avatar uploads"),
+                    'description': _("Enter maximum allowed file size (in KB) for avatar uploads."),
                     'python_type': 'int',
-                    'value': 750,
+                    'value': 1536,
                     'field_extra': {
                         'min_value': 0,
                     },
@@ -142,13 +146,17 @@ def create_users_settings_group(apps, schema_editor):
                     'value': 'watch_email',
                     'form_field': 'select',
                     'field_extra': {
-                        'choices': (
+                        'choices': [
                             ('no', _("Don't watch")),
                             ('watch', _("Put on watched threads list")),
-                            ('watch_email', _("Put on watched threads "
-                                              "list and e-mail user when "
-                                              "somebody replies")),
-                        ),
+                            (
+                                'watch_email', _(
+                                    "Put on watched threads "
+                                    "list and e-mail user when "
+                                    "somebody replies"
+                                )
+                            ),
+                        ],
                     },
                 },
                 {
@@ -157,26 +165,29 @@ def create_users_settings_group(apps, schema_editor):
                     'value': 'watch_email',
                     'form_field': 'select',
                     'field_extra': {
-                        'choices': (
+                        'choices': [
                             ('no', _("Don't watch")),
                             ('watch', _("Put on watched threads list")),
-                            ('watch_email', _("Put on watched threads "
-                                              "list and e-mail user when "
-                                              "somebody replies")),
-                        ),
+                            (
+                                'watch_email', _(
+                                    "Put on watched threads "
+                                    "list and e-mail user when "
+                                    "somebody replies"
+                                )
+                            ),
+                        ],
                     },
                 },
-            )
-        })
+            ],
+        }
+    )
 
     migrate_settings_group(
-        apps,
-        {
+        apps, {
             'key': 'captcha',
             'name': _("CAPTCHA"),
-            'description': _("Those settings allow you to combat automatic "
-                             "registrations on your forum."),
-            'settings': (
+            'description': _("Those settings allow you to combat automatic registrations on your forum."),
+            'settings': [
                 {
                     'setting': 'captcha_type',
                     'name': _("Select CAPTCHA type"),
@@ -184,11 +195,11 @@ def create_users_settings_group(apps, schema_editor):
                     'value': 'no',
                     'form_field': 'select',
                     'field_extra': {
-                        'choices': (
+                        'choices': [
                             ('no', _("No CAPTCHA")),
                             ('re', _("reCaptcha")),
                             ('qa', _("Question and answer")),
-                        ),
+                        ],
                     },
                     'is_public': True,
                 },
@@ -234,8 +245,7 @@ def create_users_settings_group(apps, schema_editor):
                 {
                     'setting': 'qa_answers',
                     'name': _("Valid answers"),
-                    'description': _("Enter each answer in new line. "
-                                     "Answers are case-insensitive."),
+                    'description': _("Enter each answer in new line. Answers are case-insensitive."),
                     'value': '',
                     'form_field': 'textarea',
                     'field_extra': {
@@ -244,8 +254,9 @@ def create_users_settings_group(apps, schema_editor):
                         'max_length': 250,
                     },
                 },
-            )
-        })
+            ],
+        }
+    )
 
 
 class Migration(migrations.Migration):

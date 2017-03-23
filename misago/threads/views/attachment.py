@@ -1,14 +1,11 @@
 from __future__ import unicode_literals
 
-import os
-
-from django.conf import settings
 from django.core.exceptions import PermissionDenied
-from django.db.models import F
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 
-from ..models import Attachment, AttachmentType
+from misago.conf import settings
+from misago.threads.models import Attachment, AttachmentType
 
 
 ATTACHMENT_404_URL = ''.join((settings.STATIC_URL, settings.MISAGO_404_IMAGE))
@@ -50,12 +47,12 @@ def serve_file(request, pk, secret, thumbnail):
 
 
 def allow_file_download(request, attachment):
-    is_authenticated = request.user.is_authenticated()
+    is_authenticated = request.user.is_authenticated
 
     if not is_authenticated or request.user.id != attachment.uploader_id:
         if not attachment.post_id:
             raise Http404()
-        if not request.user.acl['can_download_other_users_attachments']:
+        if not request.user.acl_cache['can_download_other_users_attachments']:
             raise PermissionDenied()
 
     allowed_roles = set(r.pk for r in attachment.filetype.limit_downloads_to.all())

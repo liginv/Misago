@@ -1,19 +1,16 @@
 from django.contrib import messages
-from django.core.urlresolvers import reverse
 from django.db.models import Count
-from django.shortcuts import redirect
 from django.utils.translation import ugettext_lazy as _
 
 from misago.admin.views import generic
-
-from ...forms import AttachmentTypeForm
-from ...models import AttachmentType
+from misago.threads.forms import AttachmentTypeForm
+from misago.threads.models import AttachmentType
 
 
 class AttachmentTypeAdmin(generic.AdminBaseMixin):
     root_link = 'misago:admin:system:attachment-types:index'
-    Model = AttachmentType
-    Form = AttachmentTypeForm
+    model = AttachmentType
+    form = AttachmentTypeForm
     templates_dir = 'misago/admin/attachmenttypes'
     message_404 = _("Requested attachment type could not be found.")
 
@@ -28,7 +25,7 @@ class AttachmentTypeAdmin(generic.AdminBaseMixin):
 
 
 class AttachmentTypesList(AttachmentTypeAdmin, generic.ListView):
-    ordering = (('name', None),)
+    ordering = (('name', None), )
 
     def get_queryset(self):
         queryset = super(AttachmentTypesList, self).get_queryset()
@@ -46,7 +43,9 @@ class EditAttachmentType(AttachmentTypeAdmin, generic.ModelFormView):
 class DeleteAttachmentType(AttachmentTypeAdmin, generic.ButtonView):
     def check_permissions(self, request, target):
         if target.attachment_set.exists():
-            message = _('Attachment type "%(name)s" has associated attachments and can\'t be deleted.')
+            message = _(
+                'Attachment type "%(name)s" has associated attachments and can\'t be deleted.'
+            )
             return message % {'name': target.name}
 
     def button_action(self, request, target):

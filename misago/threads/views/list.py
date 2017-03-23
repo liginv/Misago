@@ -1,24 +1,21 @@
-from django.conf import settings
-from django.core.urlresolvers import reverse
 from django.http import Http404
 from django.shortcuts import render
+from django.urls import reverse
 from django.views.generic import View
 
-from ..viewmodels.category import PrivateThreadsCategory, ThreadsCategory, ThreadsRootCategory
-from ..viewmodels.threads import ForumThreads, PrivateThreads
+from misago.core.shortcuts import get_int_or_404
+from misago.threads.viewmodels import (
+    ForumThreads, PrivateThreads, PrivateThreadsCategory, ThreadsCategory, ThreadsRootCategory)
 
 
-class ListBase(View):
+class ThreadsList(View):
     category = None
     threads = None
 
     template_name = None
 
     def get(self, request, list_type=None, **kwargs):
-        try:
-            page = int(request.GET.get('page', 0))
-        except (ValueError, TypeError):
-            raise Http404()
+        page = get_int_or_404(request.GET.get('page', 0))
 
         category = self.get_category(request, **kwargs)
         threads = self.get_threads(request, category, list_type, page)
@@ -58,7 +55,7 @@ class ListBase(View):
         return {}
 
 
-class ForumThreads(ListBase):
+class ForumThreadsList(ThreadsList):
     category = ThreadsRootCategory
     threads = ForumThreads
 
@@ -66,24 +63,23 @@ class ForumThreads(ListBase):
 
     def get_default_frontend_context(self):
         return {
-            'THREADS_API': reverse('misago:api:thread-list'),
             'MERGE_THREADS_API': reverse('misago:api:thread-merge'),
         }
 
 
-class CategoryThreads(ForumThreads):
+class CategoryThreadsList(ForumThreadsList):
     category = ThreadsCategory
 
     template_name = 'misago/threadslist/category.html'
 
     def get_category(self, request, **kwargs):
-        category = super(CategoryThreads, self).get_category(request, **kwargs)
+        category = super(CategoryThreadsList, self).get_category(request, **kwargs)
         if not category.level:
-            raise Http404() # disallow root category access
+            raise Http404()  # disallow root category access
         return category
 
 
-class PrivateThreads(ListBase):
+class PrivateThreadsList(ThreadsList):
     category = PrivateThreadsCategory
     threads = PrivateThreads
 

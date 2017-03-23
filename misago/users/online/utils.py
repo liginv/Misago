@@ -2,8 +2,8 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from ..bans import get_user_ban
-from ..models import BanCache, Online
+from misago.users.bans import get_user_ban
+from misago.users.models import BanCache, Online
 
 
 ACTIVITY_CUTOFF = timedelta(minutes=2)
@@ -17,7 +17,6 @@ def get_user_status(viewer, user):
         'is_offline_hidden': False,
         'is_online': False,
         'is_offline': False,
-
         'banned_until': None,
         'last_click': user.last_login or user.joined_on,
     }
@@ -29,7 +28,7 @@ def get_user_status(viewer, user):
 
     try:
         online_tracker = user.online_tracker
-        is_hidden = user.is_hiding_presence and not viewer.acl['can_see_hidden_users']
+        is_hidden = user.is_hiding_presence and not viewer.acl_cache['can_see_hidden_users']
 
         if online_tracker and not is_hidden:
             if online_tracker.last_click >= timezone.now() - ACTIVITY_CUTOFF:
@@ -39,7 +38,7 @@ def get_user_status(viewer, user):
         pass
 
     if user_status['is_hidden']:
-        if viewer.acl['can_see_hidden_users']:
+        if viewer.acl_cache['can_see_hidden_users']:
             user_status['is_hidden'] = False
             if user_status['is_online']:
                 user_status['is_online_hidden'] = True

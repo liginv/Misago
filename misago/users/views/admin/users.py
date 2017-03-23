@@ -12,41 +12,52 @@ from misago.conf import settings
 from misago.core.mail import mail_users
 from misago.core.pgutils import batch_update
 from misago.threads.models import Thread
+from misago.users.avatars.dynamic import set_avatar as set_dynamic_avatar
+from misago.users.forms.admin import (
+    BanUsersForm, EditUserForm, EditUserFormFactory, NewUserForm, SearchUsersForm)
+from misago.users.models import Ban
+from misago.users.signatures import set_user_signature
 
-from ...avatars.dynamic import set_avatar as set_dynamic_avatar
-from ...forms.admin import BanUsersForm, EditUserForm, NewUserForm, SearchUsersForm, StaffFlagUserFormFactory
-from ...models import ACTIVATION_REQUIRED_NONE, Ban, User
-from ...models.ban import BAN_EMAIL, BAN_IP, BAN_USERNAME
-from ...signatures import set_user_signature
+
+UserModel = get_user_model()
 
 
 class UserAdmin(generic.AdminBaseMixin):
     root_link = 'misago:admin:users:accounts:index'
     templates_dir = 'misago/admin/users'
-
-    def get_model(self):
-        return get_user_model()
+    model = UserModel
 
     def create_form_type(self, request, target):
-        if request.user.is_superuser:
-            add_staff_field = request.user.pk != target.pk
-        else:
-            add_staff_field = False
+        add_is_active_fields = False
+        add_admin_fields = False
 
-        return StaffFlagUserFormFactory(
-            self.Form, target, add_staff_field=add_staff_field)
+        if target.is_staff:
+            if request.user.is_superuser:
+                add_is_active_fields = request.user.pk != target.pk
+        else:
+            add_is_active_fields = True
+
+        if request.user.is_superuser:
+            add_admin_fields = request.user.pk != target.pk
+
+        return EditUserFormFactory(
+            self.form,
+            target,
+            add_is_active_fields=add_is_active_fields,
+            add_admin_fields=add_admin_fields,
+        )
 
 
 class UsersList(UserAdmin, generic.ListView):
     items_per_page = 24
-    ordering = (
+    ordering = [
         ('-id', _("From newest")),
         ('id', _("From oldest")),
         ('slug', _("A to z")),
         ('-slug', _("Z to a")),
         ('posts', _("Biggest posters")),
         ('-posts', _("Smallest posters")),
-    )
+    ]
     selection_label = _('With users: 0')
     empty_selection_label = _('Select users')
     mass_actions = [
@@ -70,11 +81,12 @@ class UsersList(UserAdmin, generic.ListView):
             'action': 'delete_all',
             'name': _("Delete all"),
             'icon': 'fa fa-eraser',
-            'confirmation': _("Are you sure you want to delete selected "
-                              "users? This will also delete all content "
-                              "associated with their accounts."),
+            'confirmation': _(
+                "Are you sure you want to delete selected users? "
+                "This will also delete all content associated with their accounts."
+            ),
             'is_atomic': False,
-        }
+        },
     ]
 
     def get_queryset(self):
@@ -95,20 +107,15 @@ class UsersList(UserAdmin, generic.ListView):
             raise generic.MassActionError(message)
         else:
             activated_users_pks = [u.pk for u in inactive_users]
-            queryset = User.objects.filter(pk__in=activated_users_pks)
-            queryset.update(requires_activation=ACTIVATION_REQUIRED_NONE)
+            queryset = UserModel.objects.filter(pk__in=activated_users_pks)
+            queryset.update(requires_activation=UserModel.ACTIVATION_NONE)
 
-            mail_subject = _("Your account on %(forum_name)s "
-                             "forums has been activated")
-            subject_formats = {'forum_name': settings.forum_name}
-            mail_subject = mail_subject % subject_formats
+            subject = _("Your account on %(forum_name)s forums has been activated")
+            mail_subject = subject % {'forum_name': settings.forum_name}
 
-            mail_subject = mail_subject
-            mail_users(request, inactive_users, mail_subject,
-                       'misago/emails/activation/by_admin')
+            mail_users(request, inactive_users, mail_subject, 'misago/emails/activation/by_admin')
 
-            message = _("Selected users accounts have been activated.")
-            messages.success(request, message)
+            messages.success(request, _("Selected users accounts have been activated."))
 
     def action_ban(self, request, users):
         users = users.order_by('slug')
@@ -128,31 +135,31 @@ class UsersList(UserAdmin, generic.ListView):
                 ban_kwargs = {
                     'user_message': cleaned_data.get('user_message'),
                     'staff_message': cleaned_data.get('staff_message'),
-                    'expires_on': cleaned_data.get('expires_on')
+                    'expires_on': cleaned_data.get('expires_on'),
                 }
 
                 for user in users:
                     for ban in cleaned_data['ban_type']:
                         if ban == 'usernames':
-                            check_type = BAN_USERNAME
+                            check_type = Ban.USERNAME
                             banned_value = user.username.lower()
 
                         if ban == 'emails':
-                            check_type = BAN_EMAIL
+                            check_type = Ban.EMAIL
                             banned_value = user.email.lower()
 
                         if ban == 'domains':
-                            check_type = BAN_EMAIL
+                            check_type = Ban.EMAIL
                             banned_value = user.email.lower()
                             at_pos = banned_value.find('@')
                             banned_value = '*%s' % banned_value[at_pos:]
 
                         if ban == 'ip':
-                            check_type = BAN_IP
+                            check_type = Ban.IP
                             banned_value = user.joined_from_ip
 
                         if ban in ('ip_first', 'ip_two'):
-                            check_type = BAN_IP
+                            check_type = Ban.IP
 
                             if ':' in user.joined_from_ip:
                                 ip_separator = ':'
@@ -163,38 +170,35 @@ class UsersList(UserAdmin, generic.ListView):
                             if ban == 'ip_first':
                                 formats = (bits[0], ip_separator)
                             if ban == 'ip_two':
-                                formats = (
-                                    bits[0], ip_separator,
-                                    bits[1], ip_separator
-                                )
+                                formats = (bits[0], ip_separator, bits[1], ip_separator)
                             banned_value = '%s*' % (''.join(formats))
 
                         if banned_value not in banned_values:
                             ban_kwargs.update({
                                 'check_type': check_type,
-                                'banned_value': banned_value
+                                'banned_value': banned_value,
                             })
                             Ban.objects.create(**ban_kwargs)
                             banned_values.append(banned_value)
 
-
                 Ban.objects.invalidate_cache()
-                message = _("Selected users have been banned.")
-                messages.success(request, message)
+                messages.success(request, _("Selected users have been banned."))
                 return None
 
         return self.render(
-            request, template='misago/admin/users/ban.html', context={
+            request,
+            template='misago/admin/users/ban.html',
+            context={
                 'users': users,
                 'form': form,
-            })
+            }
+        )
 
     def action_delete_accounts(self, request, users):
         for user in users:
             if user.is_staff or user.is_superuser:
-                message = _("%(user)s is admin and can't be deleted.")
-                mesage = message % {'user': user.username}
-                raise generic.MassActionError(mesage)
+                message = _("%(user)s is admin and can't be deleted.") % {'user': user.username}
+                raise generic.MassActionError(message)
 
         for user in users:
             user.delete()
@@ -203,32 +207,30 @@ class UsersList(UserAdmin, generic.ListView):
         messages.success(request, message)
 
     def action_delete_all(self, request, users):
-        return self.render(
-            request, template='misago/admin/users/delete.html', context={
-                'users': users,
-            })
-
         for user in users:
             if user.is_staff or user.is_superuser:
-                message = _("%(user)s is admin and can't be deleted.")
-                mesage = message % {'user': user.username}
-                raise generic.MassActionError(mesage)
+                message = _("%(user)s is admin and can't be deleted.") % {'user': user.username}
+                raise generic.MassActionError(message)
 
         for user in users:
             user.delete(delete_content=True)
 
-        message = _("Selected users and their content has been deleted.")
-        messages.success(request, message)
+        messages.success(request, _("Selected users and their content has been deleted."))
+
+        return self.render(
+            request, template='misago/admin/users/delete.html', context={
+                'users': users,
+            }
+        )
 
 
 class NewUser(UserAdmin, generic.ModelFormView):
-    Form = NewUserForm
+    form = NewUserForm
     template = 'new.html'
     message_submit = _('New user "%(user)s" has been registered.')
 
     def handle_form(self, form, request, target):
-        User = get_user_model()
-        new_user = User.objects.create_user(
+        new_user = UserModel.objects.create_user(
             form.cleaned_data['username'],
             form.cleaned_data['email'],
             form.cleaned_data['new_password'],
@@ -247,13 +249,12 @@ class NewUser(UserAdmin, generic.ModelFormView):
         new_user.update_acl_key()
         new_user.save()
 
-        messages.success(
-            request, self.message_submit % {'user': target.username})
+        messages.success(request, self.message_submit % {'user': target.username})
         return redirect('misago:admin:users:accounts:edit', pk=new_user.pk)
 
 
 class EditUser(UserAdmin, generic.ModelFormView):
-    Form = EditUserForm
+    form = EditUserForm
     template = 'edit.html'
     message_submit = _('User "%(user)s" has been edited.')
 
@@ -264,10 +265,8 @@ class EditUser(UserAdmin, generic.ModelFormView):
 
     def handle_form(self, form, request, target):
         target.username = target.old_username
-
         if target.username != form.cleaned_data.get('username'):
-            target.set_username(form.cleaned_data.get('username'),
-                                changed_by=request.user)
+            target.set_username(form.cleaned_data.get('username'), changed_by=request.user)
 
         if form.cleaned_data.get('new_password'):
             target.set_password(form.cleaned_data['new_password'])
@@ -285,8 +284,13 @@ class EditUser(UserAdmin, generic.ModelFormView):
             if not target.old_is_avatar_locked:
                 set_dynamic_avatar(target)
 
-        if 'staff_level' in form.cleaned_data:
-            target.staff_level = form.cleaned_data['staff_level']
+        if 'is_staff' in form.fields and 'is_superuser' in form.fields:
+            target.is_staff = form.cleaned_data.get('is_staff')
+            target.is_superuser = form.cleaned_data.get('is_superuser')
+
+        if 'is_active' in form.fields and 'is_active_staff_message' in form.fields:
+            target.is_active = form.cleaned_data.get('is_active')
+            target.is_active_staff_message = form.cleaned_data.get('is_active_staff_message')
 
         target.rank = form.cleaned_data.get('rank')
 
@@ -298,8 +302,7 @@ class EditUser(UserAdmin, generic.ModelFormView):
         target.update_acl_key()
         target.save()
 
-        messages.success(
-            request, self.message_submit % {'user': target.username})
+        messages.success(request, self.message_submit % {'user': target.username})
 
 
 class DeletionStep(UserAdmin, generic.ButtonView):
@@ -314,7 +317,9 @@ class DeletionStep(UserAdmin, generic.ButtonView):
 
     def execute_step(self, user):
         raise NotImplementedError(
-            "execute_step method should return dict with number of deleted_count and is_completed keys")
+            "execute_step method should return dict with "
+            "number of deleted_count and is_completed keys"
+        )
 
     def button_action(self, request, target):
         return JsonResponse(self.execute_step(target))
@@ -342,7 +347,7 @@ class DeleteThreadsStep(DeletionStep):
 
         return {
             'deleted_count': deleted_threads,
-            'is_completed': is_completed
+            'is_completed': is_completed,
         }
 
 
@@ -375,7 +380,7 @@ class DeletePostsStep(DeletionStep):
 
         return {
             'deleted_count': deleted_posts,
-            'is_completed': is_completed
+            'is_completed': is_completed,
         }
 
 

@@ -1,4 +1,4 @@
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 
 from misago.conf import settings
 
@@ -9,8 +9,7 @@ def legal_links(request):
     if settings.terms_of_service_link:
         legal_context['TERMS_OF_SERVICE_URL'] = settings.terms_of_service_link
     elif settings.terms_of_service:
-        legal_context['TERMS_OF_SERVICE_URL'] = reverse(
-            'misago:terms-of-service')
+        legal_context['TERMS_OF_SERVICE_URL'] = reverse('misago:terms-of-service')
 
     if settings.privacy_policy_link:
         legal_context['PRIVACY_POLICY_URL'] = settings.privacy_policy_link

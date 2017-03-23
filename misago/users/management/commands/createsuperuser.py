@@ -4,16 +4,19 @@ works with double authentication fields on user model
 """
 import sys
 from getpass import getpass
-from optparse import make_option
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 from django.db import DEFAULT_DB_ALIAS, IntegrityError
 from django.utils.encoding import force_str
 from django.utils.six.moves import input
 
-from ...validators import validate_email, validate_password, validate_username
+from misago.users.validators import validate_email, validate_username
+
+
+UserModel = get_user_model()
 
 
 class NotRunningInTTYException(Exception):
@@ -23,28 +26,45 @@ class NotRunningInTTYException(Exception):
 class Command(BaseCommand):
     help = 'Used to create a superuser.'
 
-    def __init__(self, *args, **kwargs):
-        super(Command, self).__init__(*args, **kwargs)
-
-        self.option_list = BaseCommand.option_list + (
-            make_option('--username', dest='username', default=None,
-                        help='Specifies the username for the superuser.'),
-            make_option('--email', dest='email', default=None,
-                        help='Specifies the username for the superuser.'),
-            make_option('--password', dest='password', default=None,
-                        help='Specifies the username for the superuser.'),
-            make_option('--noinput', action='store_false', dest='interactive',
-                        default=True,
-                        help=('Tells Miago to NOT prompt the user for input '
-                              'of any kind. You must use --username with '
-                              '--noinput, along with an option for any other '
-                              'required field. Superusers created with '
-                              '--noinput will  not be able to log in until '
-                              'they\'re given a valid password.')),
-            make_option('--database', action='store', dest='database',
-                        default=DEFAULT_DB_ALIAS,
-                        help=('Specifies the database to use. '
-                              'Default is "default".')),
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--username',
+            dest='username',
+            default=None,
+            help="Specifies the username for the superuser.",
+        )
+        parser.add_argument(
+            '--email',
+            dest='email',
+            default=None,
+            help="Specifies the username for the superuser.",
+        )
+        parser.add_argument(
+            '--password',
+            dest='password',
+            default=None,
+            help="Specifies the username for the superuser.",
+        )
+        parser.add_argument(
+            '--noinput',
+            action='store_false',
+            dest='interactive',
+            default=True,
+            help=(
+                "Tells Misago to NOT prompt the user for input "
+                "of any kind. You must use --username with "
+                "--noinput, along with an option for any other "
+                "required field. Superusers created with "
+                "--noinput will  not be able to log in until "
+                "they're given a valid password."
+            ),
+        )
+        parser.add_argument(
+            '--database',
+            action='store',
+            dest='database',
+            default=DEFAULT_DB_ALIAS,
+            help=('Specifies the database to use. Default is "default".'),
         )
 
     def execute(self, *args, **options):
@@ -115,11 +135,13 @@ class Command(BaseCommand):
                 while not password:
                     try:
                         raw_value = getpass("Enter password: ").strip()
-                        validate_password(raw_value)
+                        validate_password(
+                            raw_value, user=UserModel(username=username, email=email)
+                        )
+
                         repeat_raw_value = getpass("Repeat password: ").strip()
                         if raw_value != repeat_raw_value:
-                            raise ValidationError(
-                                "Entered passwords are different.")
+                            raise ValidationError("Entered passwords are different.")
                         password = raw_value
                     except ValidationError as e:
                         self.stderr.write(e.messages[0])
@@ -139,9 +161,9 @@ class Command(BaseCommand):
 
     def create_superuser(self, username, email, password, verbosity):
         try:
-            User = get_user_model()
-            user = User.objects.create_superuser(username, email, password,
-                                                 set_default_avatar=True)
+            user = UserModel.objects.create_superuser(
+                username, email, password, set_default_avatar=True
+            )
 
             if verbosity >= 1:
                 message = "Superuser #%(pk)s has been created successfully."

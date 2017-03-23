@@ -1,14 +1,13 @@
 from datetime import timedelta
 
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 from django.utils.six import StringIO
-from django.utils.six.moves import range
 
+from misago.categories.management.commands import prunecategories
+from misago.categories.models import Category
 from misago.threads import testutils
-
-from ..management.commands import prunecategories
-from ..models import Category
 
 
 class PruneCategoriesTests(TestCase):
@@ -22,12 +21,12 @@ class PruneCategoriesTests(TestCase):
         # post old threads with recent replies
         started_on = timezone.now() - timedelta(days=30)
         posted_on = timezone.now()
-        for t in range(10):
+        for _ in range(10):
             thread = testutils.post_thread(category, started_on=started_on)
             testutils.reply_thread(thread, posted_on=posted_on)
 
         # post recent threads that will be preserved
-        threads = [testutils.post_thread(category) for t in range(10)]
+        threads = [testutils.post_thread(category) for _ in range(10)]
 
         category.synchronize()
         self.assertEqual(category.threads, 20)
@@ -37,7 +36,7 @@ class PruneCategoriesTests(TestCase):
         command = prunecategories.Command()
 
         out = StringIO()
-        command.execute(stdout=out)
+        call_command(command, stdout=out)
 
         category.synchronize()
         self.assertEqual(category.threads, 10)
@@ -58,12 +57,12 @@ class PruneCategoriesTests(TestCase):
 
         # post old threads with recent replies
         started_on = timezone.now() - timedelta(days=30)
-        for t in range(10):
+        for _ in range(10):
             thread = testutils.post_thread(category, started_on=started_on)
             testutils.reply_thread(thread)
 
         # post recent threads that will be preserved
-        threads = [testutils.post_thread(category) for t in range(10)]
+        threads = [testutils.post_thread(category) for _ in range(10)]
 
         category.synchronize()
         self.assertEqual(category.threads, 20)
@@ -73,7 +72,7 @@ class PruneCategoriesTests(TestCase):
         command = prunecategories.Command()
 
         out = StringIO()
-        command.execute(stdout=out)
+        call_command(command, stdout=out)
 
         category.synchronize()
         self.assertEqual(category.threads, 10)
@@ -104,12 +103,12 @@ class PruneCategoriesTests(TestCase):
         # post old threads with recent replies
         started_on = timezone.now() - timedelta(days=30)
         posted_on = timezone.now()
-        for t in range(10):
+        for _ in range(10):
             thread = testutils.post_thread(category, started_on=started_on)
             testutils.reply_thread(thread, posted_on=posted_on)
 
         # post recent threads that will be preserved
-        threads = [testutils.post_thread(category) for t in range(10)]
+        threads = [testutils.post_thread(category) for _ in range(10)]
 
         category.synchronize()
         self.assertEqual(category.threads, 20)
@@ -119,7 +118,7 @@ class PruneCategoriesTests(TestCase):
         command = prunecategories.Command()
 
         out = StringIO()
-        command.execute(stdout=out)
+        call_command(command, stdout=out)
 
         category.synchronize()
         self.assertEqual(category.threads, 10)
@@ -153,12 +152,12 @@ class PruneCategoriesTests(TestCase):
 
         # post old threads with recent replies
         started_on = timezone.now() - timedelta(days=30)
-        for t in range(10):
+        for _ in range(10):
             thread = testutils.post_thread(category, started_on=started_on)
             testutils.reply_thread(thread)
 
         # post recent threads that will be preserved
-        threads = [testutils.post_thread(category) for t in range(10)]
+        threads = [testutils.post_thread(category) for _ in range(10)]
 
         category.synchronize()
         self.assertEqual(category.threads, 20)
@@ -168,7 +167,7 @@ class PruneCategoriesTests(TestCase):
         command = prunecategories.Command()
 
         out = StringIO()
-        command.execute(stdout=out)
+        call_command(command, stdout=out)
 
         category.synchronize()
         self.assertEqual(category.threads, 10)

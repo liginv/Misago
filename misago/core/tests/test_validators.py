@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from ..validators import validate_sluggable
+from misago.core.validators import validate_sluggable
 
 
 class ValidateSluggableTests(TestCase):
@@ -22,11 +22,13 @@ class ValidateSluggableTests(TestCase):
         with self.assertRaises(ValidationError):
             validator('!#@! !@#@')
         with self.assertRaises(ValidationError):
-            validator('!#@! !@#@ 1234567890 1234567890 1234567890 1234567890'
-                      '1234567890 1234567890 1234567890 1234567890 1234567890'
-                      '1234567890 1234567890 1234567890 1234567890 1234567890'
-                      '1234567890 1234567890 1234567890 1234567890 1234567890'
-                      '1234567890 1234567890 1234567890 1234567890 1234567890')
+            validator(
+                '!#@! !@#@ 1234567890 1234567890 1234567890 1234567890'
+                '1234567890 1234567890 1234567890 1234567890 1234567890'
+                '1234567890 1234567890 1234567890 1234567890 1234567890'
+                '1234567890 1234567890 1234567890 1234567890 1234567890'
+                '1234567890 1234567890 1234567890 1234567890 1234567890'
+            )
 
     def test_valid_input_validation(self):
         """valid values don't raise errors"""

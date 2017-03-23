@@ -1,13 +1,40 @@
+from django.contrib.auth import get_user_model
 from django.utils.translation import ugettext as _
 
-from misago.core.mail import mail_user
+from misago.core.mail import build_mail, send_messages
 
+from .events import record_event
 from .models import ThreadParticipant
-from .signals import remove_thread_participant
 
 
-def thread_has_participants(thread):
+UserModel = get_user_model()
+
+
+def has_participants(thread):
     return thread.threadparticipant_set.exists()
+
+
+def make_participants_aware(user, target):
+    if hasattr(target, '__iter__'):
+        make_threads_participants_aware(user, target)
+    else:
+        make_thread_participants_aware(user, target)
+
+
+def make_threads_participants_aware(user, threads):
+    threads_dict = {}
+    for thread in threads:
+        thread.participant = None
+        threads_dict[thread.pk] = thread
+
+    participants_qs = ThreadParticipant.objects.filter(
+        user=user,
+        thread_id__in=threads_dict.keys(),
+    )
+
+    for participant in participants_qs:
+        participant.user = user
+        threads_dict[participant.thread_id].participant = participant
 
 
 def make_thread_participants_aware(user, thread):
@@ -24,46 +51,148 @@ def make_thread_participants_aware(user, thread):
     return thread.participants_list
 
 
-def set_thread_owner(thread, user):
+def set_users_unread_private_threads_sync(users=None, participants=None, exclude_user=None):
+    users_ids = []
+    if users:
+        users_ids += [u.pk for u in users]
+    if participants:
+        users_ids += [p.user_id for p in participants]
+    if exclude_user:
+        users_ids = filter(lambda u: u != exclude_user.pk, users_ids)
+
+    if not users_ids:
+        return
+
+    UserModel.objects.filter(id__in=set(users_ids)).update(sync_unread_private_threads=True)
+
+
+def set_owner(thread, user):
     ThreadParticipant.objects.set_owner(thread, user)
 
 
-def set_user_unread_private_threads_sync(user):
-    user.sync_unread_private_threads = True
-    user.save(update_fields=['sync_unread_private_threads'])
+def change_owner(request, thread, user):
+    ThreadParticipant.objects.set_owner(thread, user)
+    set_users_unread_private_threads_sync(
+        participants=thread.participants_list,
+        exclude_user=request.user,
+    )
+
+    if thread.participant and thread.participant.is_owner:
+        record_event(
+            request,
+            thread,
+            'changed_owner',
+            {
+                'user': {
+                    'username': user.username,
+                    'url': user.get_absolute_url(),
+                },
+            },
+        )
+    else:
+        record_event(request, thread, 'tookover')
 
 
 def add_participant(request, thread, user):
+    """adds single participant to thread, registers this on the event"""
+    add_participants(request, thread, [user])
+
+    if request.user == user:
+        record_event(request, thread, 'entered_thread')
+    else:
+        record_event(
+            request,
+            thread,
+            'added_participant',
+            {
+                'user': {
+                    'username': user.username,
+                    'url': user.get_absolute_url(),
+                },
+            },
+        )
+
+
+def add_participants(request, thread, users):
     """
-    Add participant to thread, set "recound private threads" flag on user,
-    notify user about being added to thread and mail him about it
+    Add multiple participants to thread, set "recound private threads" flag on them
+    notify them about being added to thread.
     """
-    ThreadParticipant.objects.add_participant(thread, user)
+    ThreadParticipant.objects.add_participants(thread, users)
 
-    set_user_unread_private_threads_sync(user)
+    try:
+        thread_participants = thread.participants_list
+    except AttributeError:
+        thread_participants = []
 
-    mail_subject = _("%(thread)s - %(user)s added you to private thread")
-    subject_formats = {'thread': thread.title, 'user': request.user.username}
+    set_users_unread_private_threads_sync(
+        users=users,
+        participants=thread_participants,
+        exclude_user=request.user,
+    )
 
-    mail_user(request, user, mail_subject % subject_formats,
-              'misago/emails/privatethread/added',
-              {'thread': thread})
-
-
-def add_owner(thread, user):
-    """
-    Add owner to thread, set "recound private threads" flag on user,
-    notify user about being added to thread
-    """
-    ThreadParticipant.objects.add_participant(thread, user, True)
-    set_user_unread_private_threads_sync(user)
+    emails = []
+    for user in users:
+        if user != request.user:
+            emails.append(build_noticiation_email(request, thread, user))
+    if emails:
+        send_messages(emails)
 
 
-def remove_participant(thread, user):
-    """
-    Remove thread participant, set "recound private threads" flag on user
-    """
-    thread.threadparticipant_set.filter(user=user).delete()
-    set_user_unread_private_threads_sync(user)
+def build_noticiation_email(request, thread, user):
+    subject = _('%(user)s has invited you to participate in private thread "%(thread)s"')
+    subject_formats = {
+        'thread': thread.title,
+        'user': request.user.username,
+    }
 
-    remove_thread_participant.send(thread, user=user)
+    return build_mail(
+        request, user, subject % subject_formats, 'misago/emails/privatethread/added', {
+            'thread': thread,
+        }
+    )
+
+
+def remove_participant(request, thread, user):
+    """remove thread participant, set "recound private threads" flag on user"""
+    removed_owner = False
+    remaining_participants = []
+
+    for participant in thread.participants_list:
+        if participant.user == user:
+            removed_owner = participant.is_owner
+        else:
+            remaining_participants.append(participant.user)
+
+    set_users_unread_private_threads_sync(participants=thread.participants_list)
+
+    if not remaining_participants:
+        thread.delete()
+    else:
+        thread.threadparticipant_set.filter(user=user).delete()
+        thread.subscription_set.filter(user=user).delete()
+
+        if removed_owner:
+            thread.is_closed = True  # flag thread to close
+
+            if request.user == user:
+                event_type = 'owner_left'
+            else:
+                event_type = 'removed_owner'
+        else:
+            if request.user == user:
+                event_type = 'participant_left'
+            else:
+                event_type = 'removed_participant'
+
+        record_event(
+            request,
+            thread,
+            event_type,
+            {
+                'user': {
+                    'username': user.username,
+                    'url': user.get_absolute_url(),
+                },
+            },
+        )

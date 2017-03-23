@@ -8,6 +8,10 @@
   margin: 0px;
   margin-bottom: @line-height-computed;
 
+  h1 {
+    word-wrap: break-word;
+  }
+
   .btn-aligned {
     float: right;
     margin-top: @line-height-computed + 3px;
@@ -18,19 +22,37 @@
       margin-right: 8px;
     }
   }
+
+  .row .btn-aligned {
+    // just hotfix for mess in header aligments
+    margin-top: 0px;
+  }
+
+  @media screen and (min-width: @screen-md-min) {
+    .container>.row {
+      margin-top: @line-height-computed * 1.25;
+
+      h1 {
+        margin-top: -3px;
+      }
+
+      .row {
+        margin-top: @padding-small-vertical;
+      }
+    }
+  }
 }
 
 
 // Small displays
 @media screen and (max-width: @screen-sm-max) {
+  .page-header .row .btn-aligned {
+    margin-top: @line-height-computed * 0.75;
+  }
+
   .container {
     h1 {
       font-size: @font-size-large * 1.25;
-    }
-
-    .btn-aligned {
-      float: right;
-      margin-top: @line-height-computed - 7px;
     }
 
     .btn-icon {
@@ -51,7 +73,7 @@
   background: none;
   padding-left: 0px;
   padding-right: 0px;
-  margin-bottom: @line-height-computed * -1;
+  margin-bottom: @line-height-computed * -.5;
   overflow: auto;
 }
 
@@ -63,6 +85,26 @@
 
   &:before {
     margin-left: 4px;
+  }
+}
+
+
+// Small go back button
+.go-back-sm {
+  margin-top: @line-height-computed * 0.5;
+  margin-bottom: @line-height-computed * -0.66;
+
+  font-size: @font-size-small;
+
+  .material-icon {
+    height: @font-size-large;
+    width: @font-size-large;
+
+    font-size: @font-size-large;
+    line-height: @font-size-large;
+
+    position: relative;
+    top: -1px;
   }
 }
 
@@ -118,8 +160,7 @@
   }
 }
 
-
-@media screen and (max-width: @screen-sm-max) {
+@media screen and (max-width: @screen-xs-max) {
   .page-header .page-tabs {
     margin-top: ((@line-height-computed / 2) - 1);
     margin-bottom: ((@line-height-computed / 2) - 1) * -1;
@@ -129,103 +170,27 @@
     padding: 0px;
     width: 100%;
 
-    .nav-pills {
-      li {
-        display: block;
-        float: inherit;
-        width: auto;
-      }
+    ul li {
+      display: block;
+      float: none;
     }
   }
 }
 
-@media screen and (min-width: @screen-md-min) {
+@media screen and (min-width: @screen-sm-min) {
   .page-header.tabbed {
     padding-bottom: 0px;
   }
 }
 
 
-// Edit title
-.title-editable {
-  overflow: auto;
-
-  h1, .btn {
-    float: left;
-  }
-
-  .btn {
-    position: relative;
-    top: @line-height-computed;
-  }
-
-  .material-icon {
-    width: 14px;
-    height: 14px;
-
-    font-size: 14px;
-    line-height:14px;
-  }
+// Title edit form
+.title-edit-form {
+  margin-bottom: @line-height-computed;
 }
 
-.title-edit-form {
-  background: @body-bg;
-  border: 1px solid @gray-lighter;
-  border-radius: 3px;
-  float: none;
-  margin: 0px;
-  margin-top: 16px;
-  margin-bottom: 8px;
-  padding: 1px;
-  position: relative;
-  overflow: auto;
 
-  white-space: nowrap;
-
-  input, button {
-    display: inline-block;
-    margin: 3px;
-  }
-
-  input {
-    border: none;
-    width: 400px;
-
-    &, &:focus, &:active {
-      .box-shadow(none);
-    }
-  }
-
-  .btn-default {
-    padding: 2px;
-    padding-right: 0px;
-    padding-bottom: 1px;
-
-    color: darken(@gray-lighter, 5%);
-
-    &, &:hover, &:focus, &:active {
-      background: transparent;
-      border-color: transparent;
-      .box-shadow(none);
-    }
-
-    &:hover, &:focus {
-      color: @gray-darker;
-    }
-
-    &:active {
-      color: @gray;
-    }
-
-    .material-icon {
-      top: 0px;
-      left: 1px;
-
-      height: 28px;
-      width: 28px;
-
-      font-size: 28px;
-      line-height: 28px;
-    }
-  }
+// Next header
+.page-header-followup {
+  margin-top: @line-height-computed * -0.5;
 }

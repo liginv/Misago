@@ -1,37 +1,40 @@
 import random
-import sys
 import time
 
-from django.core.management.base import BaseCommand
-from django.utils.six.moves import range
-
 from faker import Factory
+
+from django.core.management.base import BaseCommand
+
 from misago.acl import version as acl_version
 from misago.categories.models import Category, RoleCategoryACL
 from misago.core.management.progressbar import show_progress
 
 
 class Command(BaseCommand):
-    help = 'Creates random fakey categories for testing purposes'
+    help = "Creates fake categories for dev and testing purposes."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            'categories',
+            help="number of categories to create",
+            nargs='?',
+            type=int,
+            default=5,
+        )
+
+        parser.add_argument(
+            'minlevel',
+            help="min. level of created categories",
+            nargs='?',
+            type=int,
+            default=0,
+        )
 
     def handle(self, *args, **options):
-        try:
-            fake_cats_to_create = int(args[0])
-        except IndexError:
-            fake_cats_to_create = 5
-        except ValueError:
-            self.stderr.write("\nOptional argument should be integer.")
-            sys.exit(1)
+        items_to_create = options['categories']
+        min_level = options['minlevel']
 
         categories = Category.objects.all_categories(True)
-
-        try:
-            min_level = int(args[1])
-        except (IndexError):
-            min_level = 0
-        except ValueError:
-            self.stderr.write("\nSecond optional argument should be integer.")
-            sys.exit(1)
 
         copy_acl_from = list(Category.objects.all_categories())[0]
 
@@ -39,14 +42,15 @@ class Command(BaseCommand):
         fake = Factory.create()
 
         message = 'Creating %s fake categories...\n'
-        self.stdout.write(message % fake_cats_to_create)
+        self.stdout.write(message % items_to_create)
 
         message = '\n\nSuccessfully created %s fake categories in %s'
 
         created_count = 0
         start_time = time.time()
-        show_progress(self, created_count, fake_cats_to_create)
-        for i in range(fake_cats_to_create):
+        show_progress(self, created_count, items_to_create)
+
+        while created_count < items_to_create:
             parent = random.choice(categories)
 
             new_category = Category()
@@ -61,25 +65,27 @@ class Command(BaseCommand):
                 else:
                     new_category.description = fake.paragraph()
 
-            new_category.insert_at(parent,
+            new_category.insert_at(
+                parent,
                 position='last-child',
                 save=True,
             )
 
             copied_acls = []
             for acl in copy_acl_from.category_role_set.all():
-                copied_acls.append(RoleCategoryACL(
-                    role_id=acl.role_id,
-                    category=new_category,
-                    category_role_id=acl.category_role_id,
-                ))
+                copied_acls.append(
+                    RoleCategoryACL(
+                        role_id=acl.role_id,
+                        category=new_category,
+                        category_role_id=acl.category_role_id,
+                    )
+                )
 
             if copied_acls:
                 RoleCategoryACL.objects.bulk_create(copied_acls)
 
             created_count += 1
-            show_progress(
-                self, created_count, fake_cats_to_create, start_time)
+            show_progress(self, created_count, items_to_create, start_time)
 
         acl_version.invalidate()
 

@@ -3,22 +3,24 @@ from django.http import Http404
 from misago.acl import add_acl
 from misago.categories.models import Category
 from misago.categories.permissions import allow_browse_category, allow_see_category
-from misago.categories.serializers import BasicCategorySerializer
+from misago.categories.serializers import CategorySerializer
 from misago.core.shortcuts import validate_slug
+from misago.core.viewmodel import ViewModel as BaseViewModel
+from misago.threads.permissions import allow_use_private_threads
 
 
-class ViewModel(object):
+__all__ = ['ThreadsRootCategory', 'ThreadsCategory', 'PrivateThreadsCategory']
+
+
+class ViewModel(BaseViewModel):
     def __init__(self, request, **kwargs):
         self._categories = self.get_categories(request)
         add_acl(request.user, self._categories)
 
         self._model = self.get_category(request, self._categories, **kwargs)
+
         self._subcategories = list(filter(self._model.has_child, self._categories))
         self._children = list(filter(lambda s: s.parent_id == self._model.pk, self._subcategories))
-
-    @property
-    def model(self):
-        return self._model
 
     @property
     def categories(self):
@@ -39,23 +41,19 @@ class ViewModel(object):
         return categories[0]
 
     def get_frontend_context(self):
-        return {
-            'CATEGORIES': BasicCategorySerializer(self._categories, many=True).data
-        }
+        return {'CATEGORIES': BasicCategorySerializer(self._categories, many=True).data}
 
     def get_template_context(self):
-        return {
-            'category': self._model,
-            'subcategories': self._children
-        }
+        return {'category': self._model, 'subcategories': self._children}
 
 
 class ThreadsRootCategory(ViewModel):
     def get_categories(self, request):
         return [Category.objects.root_category()] + list(
             Category.objects.all_categories().filter(
-                id__in=request.user.acl['browseable_categories']
-            ).select_related('parent'))
+                id__in=request.user.acl_cache['browseable_categories'],
+            ).select_related('parent')
+        )
 
 
 class ThreadsCategory(ThreadsRootCategory):
@@ -79,4 +77,26 @@ class ThreadsCategory(ThreadsRootCategory):
 
 
 class PrivateThreadsCategory(ViewModel):
-    pass
+    def get_categories(self, request):
+        return [Category.objects.private_threads()]
+
+    def get_category(self, request, categories, **kwargs):
+        allow_use_private_threads(request.user)
+
+        return categories[0]
+
+
+BasicCategorySerializer = CategorySerializer.subset_fields(
+    'id',
+    'parent',
+    'name',
+    'description',
+    'is_closed',
+    'css_class',
+    'absolute_url',
+    'api_url',
+    'level',
+    'lft',
+    'rght',
+    'is_read',
+)

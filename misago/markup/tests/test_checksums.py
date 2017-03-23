@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from .. import checksums
+from misago.markup import checksums
 
 
 class ChecksumsTests(TestCase):
@@ -10,7 +10,5 @@ class ChecksumsTests(TestCase):
 
         checksum = checksums.make_checksum(fake_message, [post_pk])
 
-        self.assertTrue(
-            checksums.is_checksum_valid(fake_message, checksum, [post_pk]))
-        self.assertFalse(
-            checksums.is_checksum_valid(fake_message, checksum, [3]))
+        self.assertTrue(checksums.is_checksum_valid(fake_message, checksum, [post_pk]))
+        self.assertFalse(checksums.is_checksum_valid(fake_message, checksum, [3]))

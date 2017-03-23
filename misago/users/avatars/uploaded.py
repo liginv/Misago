@@ -1,6 +1,3 @@
-from hashlib import sha256
-from math import floor
-
 from path import Path
 from PIL import Image
 
@@ -13,7 +10,7 @@ from . import store
 
 
 ALLOWED_EXTENSIONS = ('.gif', '.png', '.jpg', '.jpeg')
-ALLOWED_MIME_TYPES = ('image/gif', 'image/jpeg', 'image/png')
+ALLOWED_MIME_TYPES = ('image/gif', 'image/jpeg', 'image/png', 'image/mpo')
 
 
 def validate_file_size(uploaded_file):
@@ -41,8 +38,7 @@ def validate_dimensions(uploaded_file):
 
     min_size = max(settings.MISAGO_AVATARS_SIZES)
     if min(image.size) < min_size:
-        message = _("Uploaded image should be at "
-                    "least %(size)s pixels tall and wide.")
+        message = _("Uploaded image should be at least %(size)s pixels tall and wide.")
         raise ValidationError(message % {'size': min_size})
 
     if image.size[0] * image.size[1] > 2000 * 3000:
@@ -85,7 +81,6 @@ def clean_crop(image, crop):
         crop_dict = {
             'x': float(crop['offset']['x']),
             'y': float(crop['offset']['y']),
-
             'zoom': float(crop['zoom']),
         }
     except (KeyError, TypeError, ValueError):
@@ -122,7 +117,10 @@ def clean_crop(image, crop):
 
 
 def crop_source_image(user, source, crop):
-    image = Image.open(store.avatar_file_path(user, source))
+    if source == 'tmp':
+        image = Image.open(user.avatar_tmp)
+    else:
+        image = Image.open(user.avatar_src)
     crop = clean_crop(image, crop)
 
     min_size = max(settings.MISAGO_AVATARS_SIZES)
@@ -131,11 +129,10 @@ def crop_source_image(user, source, crop):
     else:
         upscale = 1.0 / crop['zoom']
         cropped_image = image.crop((
-                int(round(crop['x'] * upscale * -1, 0)),
-                int(round(crop['y'] * upscale * -1, 0)),
-                int(round((crop['x'] - min_size) * upscale * -1, 0)),
-                int(round((crop['y'] - min_size) * upscale * -1, 0)),
-            ))
+            int(round(crop['x'] * upscale * -1, 0)), int(round(crop['y'] * upscale * -1, 0)),
+            int(round((crop['x'] - min_size) * upscale * -1, 0)),
+            int(round((crop['y'] - min_size) * upscale * -1, 0)),
+        ))
 
     store.store_avatar(user, cropped_image)
     if source == 'tmp':
@@ -145,8 +142,8 @@ def crop_source_image(user, source, crop):
 
 
 def has_temporary_avatar(user):
-    return store.avatar_file_exists(user, 'tmp')
+    return bool(user.avatar_tmp)
 
 
-def has_original_avatar(user):
-    return store.avatar_file_exists(user, 'org')
+def has_source_avatar(user):
+    return bool(user.avatar_src)

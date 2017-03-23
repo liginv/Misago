@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-from django.conf import settings
-from django.db import migrations, models
-from django.utils.translation import ugettext as _
+from django.db import migrations
 
 from misago.conf.migrationutils import migrate_settings_group
 
 
+_ = lambda x: x
+
+
 def create_threads_settings_group(apps, schema_editor):
     migrate_settings_group(
-        apps,
-        {
+        apps, {
             'key': 'threads',
             'name': _("Threads"),
             'description': _("Those settings control threads and posts."),
-            'settings': (
+            'settings': [
                 {
                     'setting': 'thread_title_length_min',
                     'name': _("Minimum length"),
@@ -56,7 +56,10 @@ def create_threads_settings_group(apps, schema_editor):
                 {
                     'setting': 'post_length_max',
                     'name': _("Maximum length"),
-                    'description': _("Maximum allowed user post length. Enter zero to disable"),
+                    'description': _(
+                        "Maximum allowed user post length. Enter zero to disable. "
+                        "Longer posts are more costful to parse and index."
+                    ),
                     'python_type': 'int',
                     'value': 60000,
                     'field_extra': {
@@ -64,8 +67,9 @@ def create_threads_settings_group(apps, schema_editor):
                     },
                     'is_public': True,
                 },
-            )
-        })
+            ],
+        }
+    )
 
 
 class Migration(migrations.Migration):

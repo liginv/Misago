@@ -1,18 +1,17 @@
 from django.contrib import messages
-from django.core.urlresolvers import reverse
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
 from misago.admin.views import generic
-
-from ...forms.admin import RankForm
-from ...models import Rank
+from misago.users.forms.admin import RankForm
+from misago.users.models import Rank
 
 
 class RankAdmin(generic.AdminBaseMixin):
     root_link = 'misago:admin:users:ranks:index'
-    Model = Rank
-    Form = RankForm
+    model = Rank
+    form = RankForm
     templates_dir = 'misago/admin/ranks'
     message_404 = _("Requested rank does not exist.")
 
@@ -27,7 +26,7 @@ class RankAdmin(generic.AdminBaseMixin):
 
 
 class RanksList(RankAdmin, generic.ListView):
-    ordering = (('order', None),)
+    ordering = (('order', None), )
 
 
 class NewRank(RankAdmin, generic.ModelFormView):

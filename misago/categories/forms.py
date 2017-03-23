@@ -1,19 +1,18 @@
-from mptt.forms import *  # noqa
+from mptt.forms import TreeNodeChoiceField, TreeNodeMultipleChoiceField
 
+from django import forms
 from django.db import models
 from django.utils.html import conditional_escape, mark_safe
 from django.utils.translation import ugettext_lazy as _
 
-from misago.core import forms
+from misago.core.forms import YesNoSwitch
 from misago.core.validators import validate_sluggable
 from misago.threads.threadtypes import trees_map
 
-from .models import THREADS_ROOT_NAME, Category, CategoryRole
+from . import THREADS_ROOT_NAME
+from .models import Category, CategoryRole
 
 
-"""
-Fields
-"""
 class AdminCategoryFieldMixin(object):
     def __init__(self, *args, **kwargs):
         self.base_level = kwargs.pop('base_level', 1)
@@ -40,98 +39,70 @@ class AdminCategoryChoiceField(AdminCategoryFieldMixin, TreeNodeChoiceField):
     pass
 
 
-class AdminCategoryMultipleChoiceField(
-        AdminCategoryFieldMixin, TreeNodeMultipleChoiceField):
+class AdminCategoryMultipleChoiceField(AdminCategoryFieldMixin, TreeNodeMultipleChoiceField):
     pass
 
 
-class MisagoCategoryMixin(object):
-    def __init__(self, *args, **kwargs):
-        self.parent = None
-        if not 'queryset' in kwargs:
-            kwargs['queryset'] = Category.objects.order_by('lft')
-
-        if kwargs.get('error_messages', {}):
-            kwargs['error_messages'].update({
-                'invalid_choice': self.INVALID_CHOICE_ERROR
-            })
-        else:
-            kwargs['error_messages'] = {
-                'invalid_choice': self.INVALID_CHOICE_ERROR
-            }
-
-        super(MisagoCategoryMixin, self).__init__(*args, **kwargs)
-
-    def set_acl(self, acl=None):
-        queryset = Category.objects.root_category().get_descendants()
-        if acl:
-            allowed_ids = [0]
-            for category_id, perms in acl.get('categories', {}).items():
-                if perms.get('can_see') and perms.get('can_browse'):
-                    allowed_ids.append(category_id)
-            queryset = queryset.filter(id__in=allowed_ids)
-        self.queryset = queryset
-
-    def _get_level_indicator(self, obj):
-        level = obj.level - 1
-        return mark_safe(conditional_escape('- - ') * level)
-
-
-class CategoryChoiceField(MisagoCategoryMixin, TreeNodeChoiceField):
-    INVALID_CHOICE_ERROR = _("Select valid category.")
-
-
-class CategorysMultipleChoiceField(
-        MisagoCategoryMixin, TreeNodeMultipleChoiceField):
-    INVALID_CHOICE_ERROR = _("Select valid categories.")
-
-
-"""
-Forms
-"""
 class CategoryFormBase(forms.ModelForm):
-    name = forms.CharField(
-        label=_("Name"),
-        validators=[validate_sluggable()]
-    )
+    name = forms.CharField(label=_("Name"), validators=[validate_sluggable()])
     description = forms.CharField(
         label=_("Description"),
         max_length=2048,
         required=False,
         widget=forms.Textarea(attrs={'rows': 3}),
-        help_text=_("Optional description explaining category intented purpose.")
+        help_text=_("Optional description explaining category intented purpose."),
     )
     css_class = forms.CharField(
         label=_("CSS class"),
         required=False,
-        help_text=_("Optional CSS class used to customize this category "
-                    "appearance from templates.")
+        help_text=_(
+            "Optional CSS class used to customize this category appearance from templates."
+        ),
     )
-    is_closed = forms.YesNoSwitch(
+    is_closed = YesNoSwitch(
         label=_("Closed category"),
         required=False,
-        help_text=_("Only members with valid permissions can post in "
-                    "closed categories.")
+        help_text=_("Only members with valid permissions can post in closed categories."),
     )
     css_class = forms.CharField(
         label=_("CSS class"),
         required=False,
-        help_text=_("Optional CSS class used to customize this category "
-                    "appearance from templates.")
+        help_text=_(
+            "Optional CSS class used to customize this category appearance from templates."
+        ),
+    )
+    require_threads_approval = YesNoSwitch(
+        label=_("Threads"),
+        required=False,
+        help_text=_("All threads started in this category will require moderator approval."),
+    )
+    require_replies_approval = YesNoSwitch(
+        label=_("Replies"),
+        required=False,
+        help_text=_("All replies posted in this category will require moderator approval."),
+    )
+    require_edits_approval = YesNoSwitch(
+        label=_("Edits"),
+        required=False,
+        help_text=_(
+            "Will make all edited replies return to unapproved state for moderator to review."
+        ),
     )
     prune_started_after = forms.IntegerField(
         label=_("Thread age"),
         min_value=0,
-        help_text=_("Prune thread if number of days since its creation is "
-                    "greater than specified. Enter 0 to disable this "
-                    "pruning criteria.")
+        help_text=_(
+            "Prune thread if number of days since its creation is greater than specified. "
+            "Enter 0 to disable this pruning criteria."
+        ),
     )
     prune_replied_after = forms.IntegerField(
         label=_("Last reply"),
         min_value=0,
-        help_text=_("Prune thread if number of days since last reply is "
-                    "greater than specified. Enter 0 to disable this "
-                    "pruning criteria.")
+        help_text=_(
+            "Prune thread if number of days since last reply is greater than specified. "
+            "Enter 0 to disable this pruning criteria."
+        ),
     )
 
     class Meta:
@@ -141,6 +112,9 @@ class CategoryFormBase(forms.ModelForm):
             'description',
             'css_class',
             'is_closed',
+            'require_threads_approval',
+            'require_replies_approval',
+            'require_edits_approval',
             'prune_started_after',
             'prune_replied_after',
             'archive_pruned_in',
@@ -173,29 +147,36 @@ def CategoryFormFactory(instance):
         not_siblings = not_siblings | models.Q(rght__gt=instance.rght)
         parent_queryset = parent_queryset.filter(not_siblings)
 
-    return type('CategoryFormFinal', (CategoryFormBase,), {
-        'new_parent': AdminCategoryChoiceField(
-            label=_("Parent category"),
-            queryset=parent_queryset,
-            initial=instance.parent,
-            empty_label=None),
-
-        'copy_permissions': AdminCategoryChoiceField(
-            label=_("Copy permissions"),
-            help_text=_("You can replace this category permissions with "
-                        "permissions copied from category selected here."),
-            queryset=Category.objects.all_categories(),
-            empty_label=_("Don't copy permissions"),
-            required=False),
-
-        'archive_pruned_in': AdminCategoryChoiceField(
-            label=_("Archive"),
-            help_text=_("Instead of being deleted, pruned threads can be "
-                        "moved to designated category."),
-            queryset=Category.objects.all_categories(),
-            empty_label=_("Don't archive pruned threads"),
-            required=False),
-        })
+    return type(
+        'CategoryFormFinal', (CategoryFormBase, ), {
+            'new_parent': AdminCategoryChoiceField(
+                label=_("Parent category"),
+                queryset=parent_queryset,
+                initial=instance.parent,
+                empty_label=None,
+            ),
+            'copy_permissions': AdminCategoryChoiceField(
+                label=_("Copy permissions"),
+                help_text=_(
+                    "You can replace this category permissions with "
+                    "permissions copied from category selected here."
+                ),
+                queryset=Category.objects.all_categories(),
+                empty_label=_("Don't copy permissions"),
+                required=False,
+            ),
+            'archive_pruned_in': AdminCategoryChoiceField(
+                label=_("Archive"),
+                help_text=_(
+                    "Instead of being deleted, pruned threads can be "
+                    "moved to designated category."
+                ),
+                queryset=Category.objects.all_categories(),
+                empty_label=_("Don't archive pruned threads"),
+                required=False,
+            ),
+        }
+    )
 
 
 class DeleteCategoryFormBase(forms.ModelForm):
@@ -208,15 +189,16 @@ class DeleteCategoryFormBase(forms.ModelForm):
 
         if data.get('move_threads_to'):
             if data['move_threads_to'].pk == self.instance.pk:
-                message = _("You are trying to move this category threads to "
-                            "itself.")
+                message = _("You are trying to move this category threads to itself.")
                 raise forms.ValidationError(message)
 
             moving_to_child = self.instance.has_child(data['move_threads_to'])
             if moving_to_child and not data.get('move_children_to'):
-                message = _("You are trying to move this category threads to a "
-                            "child category that will be deleted together with "
-                            "this category.")
+                message = _(
+                    "You are trying to move this category threads to a "
+                    "child category that will be deleted together with "
+                    "this category."
+                )
                 raise forms.ValidationError(message)
 
         return data
@@ -230,7 +212,7 @@ def DeleteFormFactory(instance):
             queryset=content_queryset,
             initial=instance.parent,
             empty_label=_('Delete with category'),
-            required=False
+            required=False,
         )
     }
 
@@ -244,10 +226,10 @@ def DeleteFormFactory(instance):
             label=_("Move child categories to"),
             queryset=children_queryset,
             empty_label=_('Delete with category'),
-            required=False
+            required=False,
         )
 
-    return type('DeleteCategoryFormFinal', (DeleteCategoryFormBase,), fields)
+    return type('DeleteCategoryFormFinal', (DeleteCategoryFormBase, ), fields)
 
 
 class CategoryRoleForm(forms.ModelForm):
@@ -266,11 +248,11 @@ def RoleCategoryACLFormFactory(category, category_roles, selected_role):
             required=False,
             queryset=category_roles,
             initial=selected_role,
-            empty_label=_("No access")
+            empty_label=_("No access"),
         )
     }
 
-    return type('RoleCategoryACLForm', (forms.Form,), attrs)
+    return type('RoleCategoryACLForm', (forms.Form, ), attrs)
 
 
 def CategoryRolesACLFormFactory(role, category_roles, selected_role):
@@ -281,8 +263,8 @@ def CategoryRolesACLFormFactory(role, category_roles, selected_role):
             required=False,
             queryset=category_roles,
             initial=selected_role,
-            empty_label=_("No access")
+            empty_label=_("No access"),
         )
     }
 
-    return type('CategoryRolesACLForm', (forms.Form,), attrs)
+    return type('CategoryRolesACLForm', (forms.Form, ), attrs)

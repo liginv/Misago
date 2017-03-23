@@ -1,14 +1,16 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from ..namechanges import UsernameChanges
+from misago.users.namechanges import UsernameChanges
+
+
+UserModel = get_user_model()
 
 
 class UsernameChangesTests(TestCase):
     def test_username_changes_helper(self):
         """username changes are tracked correctly"""
-        User = get_user_model()
-        test_user = User.objects.create_user('Bob', 'bob@bob.com', 'pass123')
+        test_user = UserModel.objects.create_user('Bob', 'bob@bob.com', 'pass123')
 
         namechanges = UsernameChanges(test_user)
         self.assertEqual(namechanges.left, 2)

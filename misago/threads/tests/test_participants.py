@@ -3,16 +3,12 @@ from django.test import TestCase
 from django.utils import timezone
 
 from misago.categories.models import Category
+from misago.threads.models import Post, Thread, ThreadParticipant
+from misago.threads.participants import (
+    has_participants, make_participants_aware, set_owner, set_users_unread_private_threads_sync)
 
-from ..models import Post, Thread, ThreadParticipant
-from ..participants import (
-    add_owner,
-    make_thread_participants_aware,
-    remove_participant,
-    set_thread_owner,
-    set_user_unread_private_threads_sync,
-    thread_has_participants
-)
+
+UserModel = get_user_model()
 
 
 class ParticipantsTests(TestCase):
@@ -27,7 +23,7 @@ class ParticipantsTests(TestCase):
             starter_slug='tester',
             last_post_on=datetime,
             last_poster_name='Tester',
-            last_poster_slug='tester'
+            last_poster_slug='tester',
         )
 
         self.thread.set_title("Test thread")
@@ -42,47 +38,65 @@ class ParticipantsTests(TestCase):
             parsed="<p>Hello! I am test message!</p>",
             checksum="nope",
             posted_on=datetime,
-            updated_on=datetime
+            updated_on=datetime,
         )
 
         self.thread.first_post = post
         self.thread.last_post = post
         self.thread.save()
 
-    def test_thread_has_participants(self):
-        """thread_has_participants returns true if thread has participants"""
-        User = get_user_model()
-        user = User.objects.create_user(
-            "Bob", "bob@boberson.com", "Pass.123")
-        other_user = User.objects.create_user(
-            "Bob2", "bob2@boberson.com", "Pass.123")
+    def test_has_participants(self):
+        """has_participants returns true if thread has participants"""
+        users = [
+            UserModel.objects.create_user("Bob", "bob@boberson.com", "Pass.123"),
+            UserModel.objects.create_user("Bob2", "bob2@boberson.com", "Pass.123"),
+        ]
 
-        self.assertFalse(thread_has_participants(self.thread))
+        self.assertFalse(has_participants(self.thread))
 
-        ThreadParticipant.objects.add_participant(self.thread, user)
-        self.assertTrue(thread_has_participants(self.thread))
-
-        ThreadParticipant.objects.add_participant(self.thread, other_user)
-        self.assertTrue(thread_has_participants(self.thread))
+        ThreadParticipant.objects.add_participants(self.thread, users)
+        self.assertTrue(has_participants(self.thread))
 
         self.thread.threadparticipant_set.all().delete()
-        self.assertFalse(thread_has_participants(self.thread))
+        self.assertFalse(has_participants(self.thread))
 
-    def test_make_thread_participants_aware(self):
+    def test_make_threads_participants_aware(self):
         """
-        make_thread_participants_aware sets participants_list and participant
-        adnotations on thread model
+        make_participants_aware sets participants_list and participant
+        annotations on list of threads
         """
-        User = get_user_model()
-        user = User.objects.create_user(
-            "Bob", "bob@boberson.com", "Pass.123")
-        other_user = User.objects.create_user(
-            "Bob2", "bob2@boberson.com", "Pass.123")
+        user = UserModel.objects.create_user("Bob", "bob@boberson.com", "Pass.123")
+        other_user = UserModel.objects.create_user("Bob2", "bob2@boberson.com", "Pass.123")
 
         self.assertFalse(hasattr(self.thread, 'participants_list'))
         self.assertFalse(hasattr(self.thread, 'participant'))
 
-        make_thread_participants_aware(user, self.thread)
+        make_participants_aware(user, [self.thread])
+
+        self.assertFalse(hasattr(self.thread, 'participants_list'))
+        self.assertTrue(hasattr(self.thread, 'participant'))
+        self.assertIsNone(self.thread.participant)
+
+        ThreadParticipant.objects.set_owner(self.thread, user)
+        ThreadParticipant.objects.add_participants(self.thread, [other_user])
+
+        make_participants_aware(user, [self.thread])
+
+        self.assertFalse(hasattr(self.thread, 'participants_list'))
+        self.assertEqual(self.thread.participant.user, user)
+
+    def test_make_thread_participants_aware(self):
+        """
+        make_participants_aware sets participants_list and participant
+        annotations on thread model
+        """
+        user = UserModel.objects.create_user("Bob", "bob@boberson.com", "Pass.123")
+        other_user = UserModel.objects.create_user("Bob2", "bob2@boberson.com", "Pass.123")
+
+        self.assertFalse(hasattr(self.thread, 'participants_list'))
+        self.assertFalse(hasattr(self.thread, 'participant'))
+
+        make_participants_aware(user, self.thread)
 
         self.assertTrue(hasattr(self.thread, 'participants_list'))
         self.assertTrue(hasattr(self.thread, 'participant'))
@@ -90,10 +104,10 @@ class ParticipantsTests(TestCase):
         self.assertEqual(self.thread.participants_list, [])
         self.assertIsNone(self.thread.participant)
 
-        ThreadParticipant.objects.add_participant(self.thread, user, True)
-        ThreadParticipant.objects.add_participant(self.thread, other_user)
+        ThreadParticipant.objects.set_owner(self.thread, user)
+        ThreadParticipant.objects.add_participants(self.thread, [other_user])
 
-        make_thread_participants_aware(user, self.thread)
+        make_participants_aware(user, self.thread)
 
         self.assertEqual(self.thread.participant.user, user)
         for participant in self.thread.participants_list:
@@ -102,60 +116,97 @@ class ParticipantsTests(TestCase):
         else:
             self.fail("thread.participants_list didn't contain user")
 
-    def test_set_thread_owner(self):
-        """set_thread_owner sets user as thread owner"""
-        User = get_user_model()
-        user = User.objects.create_user(
-            "Bob", "bob@boberson.com", "Pass.123")
+    def test_set_owner(self):
+        """set_owner sets user as thread owner"""
+        user = UserModel.objects.create_user("Bob", "bob@boberson.com", "Pass.123")
 
-        set_thread_owner(self.thread, user)
+        set_owner(self.thread, user)
 
         owner = self.thread.threadparticipant_set.get(is_owner=True)
         self.assertEqual(user, owner.user)
 
-    def test_set_user_unread_private_threads_sync(self):
+    def test_set_users_unread_private_threads_sync(self):
         """
-        set_user_unread_private_threads_sync sets sync_unread_private_threads
-        flag on user model to true
+        set_users_unread_private_threads_sync sets sync_unread_private_threads
+        flag on users provided to true
         """
-        User = get_user_model()
-        user = User.objects.create_user(
-            "Bob", "bob@boberson.com", "Pass.123")
+        users = [
+            UserModel.objects.create_user("Bob1", "bob1@boberson.com", "Pass.123"),
+            UserModel.objects.create_user("Bob2", "bob2@boberson.com", "Pass.123"),
+        ]
 
-        self.assertFalse(user.sync_unread_private_threads)
+        set_users_unread_private_threads_sync(users=users)
+        for user in users:
+            UserModel.objects.get(
+                pk=user.pk,
+                sync_unread_private_threads=True,
+            )
 
-        set_user_unread_private_threads_sync(user)
-        self.assertTrue(user.sync_unread_private_threads)
+    def test_set_participants_unread_private_threads_sync(self):
+        """
+        set_users_unread_private_threads_sync sets sync_unread_private_threads
+        flag on participants provided to true
+        """
+        users = [
+            UserModel.objects.create_user("Bob1", "bob1@boberson.com", "Pass.123"),
+            UserModel.objects.create_user("Bob2", "bob2@boberson.com", "Pass.123"),
+        ]
 
-        db_user = User.objects.get(pk=user.pk)
-        self.assertTrue(db_user.sync_unread_private_threads)
+        participants = [ThreadParticipant(user=u) for u in users]
 
-    def test_add_owner(self):
-        """add_owner adds user as thread owner"""
-        User = get_user_model()
-        user = User.objects.create_user(
-            "Bob", "bob@boberson.com", "Pass.123")
+        set_users_unread_private_threads_sync(participants=participants)
+        for user in users:
+            UserModel.objects.get(
+                pk=user.pk,
+                sync_unread_private_threads=True,
+            )
 
-        add_owner(self.thread, user)
-        self.assertTrue(user.sync_unread_private_threads)
+    def test_set_participants_users_unread_private_threads_sync(self):
+        """
+        set_users_unread_private_threads_sync sets sync_unread_private_threads
+        flag on users and participants provided to true
+        """
+        users = [
+            UserModel.objects.create_user("Bob1", "bob1@boberson.com", "Pass.123"),
+        ]
 
-        owner = self.thread.threadparticipant_set.get(is_owner=True)
-        self.assertEqual(user, owner.user)
+        participants = [ThreadParticipant(user=u) for u in users]
 
-    def test_remove_participant(self):
-        """remove_participant removes user from thread"""
-        User = get_user_model()
-        user = User.objects.create_user(
-            "Bob", "bob@boberson.com", "Pass.123")
+        users.append(UserModel.objects.create_user("Bob2", "bob2@boberson.com", "Pass.123"))
 
-        add_owner(self.thread, user)
-        remove_participant(self.thread, user)
+        set_users_unread_private_threads_sync(
+            users=users,
+            participants=participants,
+        )
+        for user in users:
+            UserModel.objects.get(
+                pk=user.pk,
+                sync_unread_private_threads=True,
+            )
 
-        with self.assertRaises(ThreadParticipant.DoesNotExist):
-            self.thread.threadparticipant_set.get(user=user)
+    def test_set_users_unread_private_threads_sync_exclude_user(self):
+        """exclude_user kwarg works"""
+        users = [
+            UserModel.objects.create_user("Bob1", "bob1@boberson.com", "Pass.123"),
+            UserModel.objects.create_user("Bob2", "bob2@boberson.com", "Pass.123")
+        ]
 
-        set_user_unread_private_threads_sync(user)
-        self.assertTrue(user.sync_unread_private_threads)
+        set_users_unread_private_threads_sync(
+            users=users,
+            exclude_user=users[0],
+        )
 
-        db_user = User.objects.get(pk=user.pk)
-        self.assertTrue(db_user.sync_unread_private_threads)
+        self.assertFalse(UserModel.objects.get(pk=users[0].pk).sync_unread_private_threads)
+        self.assertTrue(UserModel.objects.get(pk=users[1].pk).sync_unread_private_threads)
+
+    def test_set_users_unread_private_threads_sync_noop(self):
+        """excluding only user is noop"""
+        user = UserModel.objects.create_user("Bob1", "bob1@boberson.com", "Pass.123")
+
+        with self.assertNumQueries(0):
+            set_users_unread_private_threads_sync(
+                users=[user],
+                exclude_user=user,
+            )
+
+        self.assertFalse(UserModel.objects.get(pk=user.pk).sync_unread_private_threads)

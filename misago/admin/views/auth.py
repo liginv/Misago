@@ -5,9 +5,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.debug import sensitive_post_parameters
 
+from misago.admin import auth
 from misago.users.forms.auth import AdminAuthenticationForm
-
-from .. import auth
 
 
 @sensitive_post_parameters()
@@ -29,8 +28,7 @@ def login(request):
             auth.login(request, form.user_cache)
             return redirect('%s:index' % request.admin_namespace)
 
-    return render(request, 'misago/admin/login.html',
-                  {'form': form, 'target': target})
+    return render(request, 'misago/admin/login.html', {'form': form, 'target': target})
 
 
 @csrf_protect
@@ -38,8 +36,7 @@ def login(request):
 def logout(request):
     if request.method == 'POST':
         auth.close_admin_session(request)
-        messages.info(request,
-                      _("Your admin session has been closed."))
+        messages.info(request, _("Your admin session has been closed."))
         return redirect('misago:index')
     else:
         return redirect('misago:admin:index')

@@ -1,21 +1,17 @@
 from rest_framework.response import Response
 
 from misago.core.shortcuts import get_int_or_404
+from misago.threads.viewmodels import (
+    ForumThreads, PrivateThreads, PrivateThreadsCategory, ThreadsCategory, ThreadsRootCategory)
 
-from ...viewmodels.category import ThreadsCategory, ThreadsRootCategory
-from ...viewmodels.threads import ForumThreads
 
-
-class ListEndpointBase(object):
-    category = None
+class ThreadsList(object):
     threads = None
-
-    template_name = None
 
     def __call__(self, request, **kwargs):
         page = get_int_or_404(request.query_params.get('page', 0))
         if page == 1:
-            page = 0 # api allows explicit first page
+            page = 0  # api allows explicit first page
 
         list_type = request.query_params.get('list', 'all')
 
@@ -24,6 +20,9 @@ class ListEndpointBase(object):
 
         return Response(self.get_response_json(request, category, threads)['THREADS'])
 
+    def get_category(self, request, pk=None):
+        raise NotImplementedError('Threads list has to implement get_category(request, pk=None)')
+
     def get_threads(self, request, category, list_type, page):
         return self.threads(request, category, list_type, page)
 
@@ -31,7 +30,7 @@ class ListEndpointBase(object):
         return threads.get_frontend_context()
 
 
-class ForumThreads(ListEndpointBase):
+class ForumThreadsList(ThreadsList):
     threads = ForumThreads
 
     def get_category(self, request, pk=None):
@@ -40,4 +39,13 @@ class ForumThreads(ListEndpointBase):
         else:
             return ThreadsRootCategory(request)
 
-threads_list_endpoint = ForumThreads()
+
+class PrivateThreadsList(ThreadsList):
+    threads = PrivateThreads
+
+    def get_category(self, request, pk=None):
+        return PrivateThreadsCategory(request)
+
+
+threads_list_endpoint = ForumThreadsList()
+private_threads_list_endpoint = PrivateThreadsList()

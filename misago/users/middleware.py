@@ -1,17 +1,12 @@
-import pytz
-
 from django.contrib.auth import logout
-from django.contrib.auth.models import AnonymousUser as DjAnonymousUser
-from django.core.urlresolvers import resolve
-
-from misago.conf import settings
+from django.utils.deprecation import MiddlewareMixin
 
 from .bans import get_request_ip_ban, get_user_ban
 from .models import AnonymousUser, Online
 from .online import tracker
 
 
-class RealIPMiddleware(object):
+class RealIPMiddleware(MiddlewareMixin):
     def process_request(self, request):
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
@@ -20,26 +15,19 @@ class RealIPMiddleware(object):
             request.user_ip = request.META.get('REMOTE_ADDR')
 
 
-class AvatarServerMiddleware(object):
+class UserMiddleware(MiddlewareMixin):
     def process_request(self, request):
-        if request.path_info.startswith(settings.MISAGO_AVATAR_SERVER_PATH):
-            request.user = DjAnonymousUser()
-            resolved_path = resolve(request.path_info)
-            return resolved_path.func(request, **resolved_path.kwargs)
-
-
-class UserMiddleware(object):
-    def process_request(self, request):
-        if request.user.is_anonymous():
+        if request.user.is_anonymous:
             request.user = AnonymousUser()
-        elif not request.user.is_superuser:
+        elif not request.user.is_staff:
             if get_request_ip_ban(request) or get_user_ban(request.user):
                 logout(request)
+                request.user = AnonymousUser()
 
 
-class OnlineTrackerMiddleware(object):
+class OnlineTrackerMiddleware(MiddlewareMixin):
     def process_request(self, request):
-        if request.user.is_authenticated():
+        if request.user.is_authenticated:
             try:
                 request._misago_online_tracker = request.user.online_tracker
             except Online.DoesNotExist:
@@ -52,7 +40,7 @@ class OnlineTrackerMiddleware(object):
             online_tracker = request._misago_online_tracker
 
             if online_tracker:
-                if request.user.is_anonymous():
+                if request.user.is_anonymous:
                     tracker.stop_tracking(request, online_tracker)
                 else:
                     tracker.update_tracker(request, online_tracker)

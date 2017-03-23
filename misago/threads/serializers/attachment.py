@@ -1,10 +1,8 @@
-from django.core.urlresolvers import reverse
-
 from rest_framework import serializers
 
-from misago.core.utils import format_plaintext_for_html
+from django.urls import reverse
 
-from ..models import Attachment
+from misago.threads.models import Attachment
 
 
 __all__ = ['AttachmentSerializer']
@@ -22,7 +20,7 @@ class AttachmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Attachment
-        fields = (
+        fields = [
             'id',
             'filetype',
             'post',
@@ -31,12 +29,10 @@ class AttachmentSerializer(serializers.ModelSerializer):
             'uploader_ip',
             'filename',
             'size',
-
             'acl',
             'is_image',
-
             'url',
-        )
+        ]
 
     def get_acl(self, obj):
         try:
@@ -51,7 +47,7 @@ class AttachmentSerializer(serializers.ModelSerializer):
         return obj.filetype.name
 
     def get_uploader_ip(self, obj):
-        if 'user' in self.context and self.context['user'].acl['can_see_users_ips']:
+        if 'user' in self.context and self.context['user'].acl_cache['can_see_users_ips']:
             return obj.uploader_ip
         else:
             return None
@@ -65,9 +61,11 @@ class AttachmentSerializer(serializers.ModelSerializer):
 
     def get_uploader_url(self, obj):
         if obj.uploader_id:
-            return reverse('misago:user', kwargs={
-                'slug': obj.uploader_slug,
-                'pk': obj.uploader_id,
-            })
+            return reverse(
+                'misago:user', kwargs={
+                    'slug': obj.uploader_slug,
+                    'pk': obj.uploader_id,
+                }
+            )
         else:
             return None

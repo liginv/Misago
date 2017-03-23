@@ -1,5 +1,6 @@
+from misago.threads import moderation
+
 from . import PostingEndpoint, PostingMiddleware
-from ... import moderation
 
 
 class CloseMiddleware(PostingMiddleware):

@@ -1,21 +1,16 @@
-from django.contrib.auth import get_user_model
-from django.core.urlresolvers import reverse
-
 from rest_framework import serializers
 
-from misago.acl import serialize_acl
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+from misago.core.serializers import MutableFields
 
 from . import RankSerializer
 
 
-__all__ = [
-    'AuthenticatedUserSerializer',
-    'AnonymousUserSerializer',
-    'BasicUserSerializer',
-    'UserSerializer',
-    'ScoredUserSerializer',
-    'UserProfileSerializer',
-]
+UserModel = get_user_model()
+
+__all__ = ['StatusSerializer', 'UserSerializer', 'UserCardSerializer']
 
 
 class StatusSerializer(serializers.Serializer):
@@ -30,120 +25,76 @@ class StatusSerializer(serializers.Serializer):
     banned_until = serializers.DateTimeField()
 
 
-class AuthenticatedUserSerializer(serializers.ModelSerializer):
-    acl = serializers.SerializerMethodField()
+class UserSerializer(serializers.ModelSerializer, MutableFields):
+    email = serializers.SerializerMethodField()
     rank = RankSerializer(many=False, read_only=True)
+    signature = serializers.SerializerMethodField()
+
+    acl = serializers.SerializerMethodField()
+    is_followed = serializers.SerializerMethodField()
+    is_blocked = serializers.SerializerMethodField()
+    meta = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     absolute_url = serializers.SerializerMethodField()
     api_url = serializers.SerializerMethodField()
 
     class Meta:
-        model = get_user_model()
-        fields = (
+        model = UserModel
+        fields = [
             'id',
             'username',
             'slug',
             'email',
             'joined_on',
-            'is_hiding_presence',
-            'title',
-            'full_title',
-            'short_title',
             'rank',
-            'avatar_hash',
-            'new_notifications',
-            'limits_private_thread_invites_to',
-            'unread_private_threads',
-            'subscribe_to_started_threads',
-            'subscribe_to_replied_threads',
-            'threads',
-            'posts',
-            'followers',
-            'following',
-            'acl',
-            'absolute_url',
-            'api_url'
-        )
-
-    def get_acl(self, obj):
-        return serialize_acl(obj)
-
-    def get_absolute_url(self, obj):
-        return obj.get_absolute_url()
-
-    def get_api_url(self, obj):
-        return {
-            'avatar': reverse(
-                'misago:api:user-avatar', kwargs={'pk': obj.pk}),
-            'options': reverse(
-                'misago:api:user-forum-options', kwargs={'pk': obj.pk}),
-            'username': reverse(
-                'misago:api:user-username', kwargs={'pk': obj.pk}),
-            'change_email': reverse(
-                'misago:api:user-change-email', kwargs={'pk': obj.pk}),
-            'change_password': reverse(
-                'misago:api:user-change-password', kwargs={'pk': obj.pk}),
-        }
-
-
-class AnonymousUserSerializer(serializers.Serializer):
-    id = serializers.ReadOnlyField()
-    acl = serializers.SerializerMethodField()
-
-    def get_acl(self, obj):
-        if hasattr(obj, 'acl'):
-            return serialize_acl(obj)
-        else:
-            return {}
-
-
-class BaseSerializer(serializers.ModelSerializer):
-    absolute_url = serializers.SerializerMethodField()
-
-    def get_absolute_url(self, obj):
-        return obj.get_absolute_url()
-
-    def get_short_title(self, obj):
-        return obj.short_title
-
-
-class BasicUserSerializer(BaseSerializer):
-    class Meta:
-        model = get_user_model()
-        fields = (
-            'id',
-            'username',
-            'slug',
-            'avatar_hash',
-            'absolute_url',
-        )
-
-
-class UserSerializer(BaseSerializer):
-    rank = RankSerializer(many=False, read_only=True)
-    short_title = serializers.SerializerMethodField()
-    status = serializers.SerializerMethodField()
-    signature = serializers.SerializerMethodField()
-
-    class Meta:
-        model = get_user_model()
-        fields = (
-            'id',
-            'username',
-            'slug',
-            'joined_on',
-            'avatar_hash',
             'title',
-            'short_title',
-            'rank',
+            'avatars',
+            'is_avatar_locked',
             'signature',
-            'threads',
-            'posts',
+            'is_signature_locked',
             'followers',
             'following',
+            'threads',
+            'posts',
+            'acl',
+            'is_followed',
+            'is_blocked',
+            'meta',
             'status',
             'absolute_url',
-        )
+            'api_url',
+        ]
+
+    def get_acl(self, obj):
+        return obj.acl
+
+    def get_email(self, obj):
+        if (obj == self.context['user'] or self.context['user'].acl_cache['can_see_users_emails']):
+            return obj.email
+        else:
+            return None
+
+    def get_is_followed(self, obj):
+        if obj.acl['can_follow']:
+            return self.context['user'].is_following(obj)
+        else:
+            return False
+
+    def get_is_blocked(self, obj):
+        if obj.acl['can_block']:
+            return self.context['user'].is_blocking(obj)
+        else:
+            return False
+
+    def get_meta(self, obj):
+        return {'score': obj.score}
+
+    def get_signature(self, obj):
+        if obj.has_valid_signature:
+            return obj.signature_parsed
+        else:
+            return None
 
     def get_status(self, obj):
         try:
@@ -151,103 +102,34 @@ class UserSerializer(BaseSerializer):
         except AttributeError:
             return None
 
-    def get_signature(self, obj):
-        if obj.has_valid_signature:
-            return obj.signature.signature_parsed
-        else:
-            return None
-
-
-class ScoredUserSerializer(UserSerializer):
-    meta = serializers.SerializerMethodField()
-
-    class Meta:
-        model = get_user_model()
-        fields = (
-            'id',
-            'username',
-            'slug',
-            'joined_on',
-            'avatar_hash',
-            'title',
-            'rank',
-            'signature',
-            'threads',
-            'posts',
-            'followers',
-            'following',
-            'meta',
-            'status',
-            'absolute_url',
-        )
-
-    def get_meta(self, obj):
-        return {'score': obj.score}
-
-
-class UserProfileSerializer(UserSerializer):
-    email = serializers.SerializerMethodField()
-    is_followed = serializers.SerializerMethodField()
-    is_blocked = serializers.SerializerMethodField()
-    acl = serializers.SerializerMethodField()
-    api_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = get_user_model()
-        fields = (
-            'id',
-            'username',
-            'slug',
-            'email',
-            'joined_on',
-            'is_avatar_locked',
-            'avatar_hash',
-            'title',
-            'rank',
-            'signature',
-            'is_signature_locked',
-            'threads',
-            'posts',
-            'followers',
-            'following',
-            'is_followed',
-            'is_blocked',
-            'status',
-            'acl',
-            'absolute_url',
-            'api_url',
-        )
-
-    def get_email(self, obj):
-        if (obj == self.context['user'] or
-                self.context['user'].acl['can_see_users_emails']):
-            return obj.email
-        else:
-            return None
-
-    def get_acl(self, obj):
-        return obj.acl_
-
-    def get_is_followed(self, obj):
-        if obj.acl_['can_follow']:
-            return self.context['user'].is_following(obj)
-        else:
-            return False
-
-    def get_is_blocked(self, obj):
-        if obj.acl_['can_block']:
-            return self.context['user'].is_blocking(obj)
-        else:
-            return False
+    def get_absolute_url(self, obj):
+        return obj.get_absolute_url()
 
     def get_api_url(self, obj):
         return {
             'root': reverse('misago:api:user-detail', kwargs={'pk': obj.pk}),
             'follow': reverse('misago:api:user-follow', kwargs={'pk': obj.pk}),
             'ban': reverse('misago:api:user-ban', kwargs={'pk': obj.pk}),
-            'moderate_avatar': reverse(
-                'misago:api:user-moderate-avatar',kwargs={'pk': obj.pk}),
-            'moderate_username': reverse(
-                'misago:api:user-moderate-username',kwargs={'pk': obj.pk}),
+            'moderate_avatar': reverse('misago:api:user-moderate-avatar', kwargs={'pk': obj.pk}),
+            'moderate_username': reverse('misago:api:user-moderate-username', kwargs={'pk': obj.pk}),
             'delete': reverse('misago:api:user-delete', kwargs={'pk': obj.pk}),
+            'followers': reverse('misago:api:user-followers', kwargs={'pk': obj.pk}),
+            'follows': reverse('misago:api:user-follows', kwargs={'pk': obj.pk}),
+            'threads': reverse('misago:api:user-threads', kwargs={'pk': obj.pk}),
+            'posts': reverse('misago:api:user-posts', kwargs={'pk': obj.pk}),
         }
+
+
+UserCardSerializer = UserSerializer.subset_fields(
+    'id',
+    'username',
+    'joined_on',
+    'rank',
+    'title',
+    'avatars',
+    'followers',
+    'threads',
+    'posts',
+    'status',
+    'absolute_url',
+)

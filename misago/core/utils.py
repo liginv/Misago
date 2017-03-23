@@ -1,35 +1,31 @@
 from datetime import datetime, timedelta
 
-import six
-from unidecode import unidecode
-
-from django.core.urlresolvers import resolve, reverse
+from django.conf import settings
 from django.http import Http404
-from django.template.defaultfilters import slugify as django_slugify
+from django.urls import resolve, reverse
 from django.utils import html, timezone
 from django.utils.encoding import force_text
-from django.utils.translation import ugettext_lazy as _, ungettext_lazy
+from django.utils.module_loading import import_string
 
 
-def slugify(string):
-    string = six.text_type(string)
-    string = unidecode(string)
-    return django_slugify(string.replace('_', ' ').strip())
+MISAGO_SLUGIFY = getattr(settings, 'MISAGO_SLUGIFY', 'misago.core.slugify.default')
+
+slugify = import_string(MISAGO_SLUGIFY)
 
 
 def format_plaintext_for_html(string):
     return html.linebreaks(html.urlize(html.escape(string)))
 
 
-"""
-Turn ISO 8601 string into datetime object
-"""
-ISO8601_FORMATS = (
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S.%f",
-)
+def encode_json_html(string):
+    return string.replace('<', r'\u003C')
+
+
+ISO8601_FORMATS = ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", )
+
 
 def parse_iso8601_string(value):
+    """turns ISO 8601 string into datetime object"""
     value = force_text(value, strings_only=True).rstrip('Z')
 
     for format in ISO8601_FORMATS:
@@ -58,19 +54,17 @@ def parse_iso8601_string(value):
     return timezone.make_aware(parsed_value, tz_correction)
 
 
-"""
-Mark request as having sensitive parameters
-We can't use decorator because of DRF uses custom HttpRequest
-that is incompatibile with Django's decorator
-"""
 def hide_post_parameters(request):
+    """
+    Mark request as having sensitive parameters
+    We can't use decorator because of DRF uses custom HttpRequest
+    that is incompatibile with Django's decorator
+    """
     request.sensitive_post_parameters = '__ALL__'
 
 
-"""
-Return path utility
-"""
 def clean_return_path(request):
+    """return path utility that returns return path from referer or POST"""
     if request.method == 'POST' and 'return_path' in request.POST:
         return _get_return_path_from_post(request)
     else:
@@ -109,9 +103,14 @@ def _get_return_path_from_referer(request):
         return None
 
 
-"""
-Utils for resolving requests destination
-"""
+def is_request_to_misago(request):
+    try:
+        return request._request_to_misago
+    except AttributeError:
+        request._request_to_misago = _is_request_path_under_misago(request)
+        return request._request_to_misago
+
+
 def _is_request_path_under_misago(request):
     # We are assuming that forum_index link is root of all Misago links
     forum_index = reverse('misago:index')
@@ -120,14 +119,6 @@ def _is_request_path_under_misago(request):
     if len(forum_index) > len(path_info):
         return False
     return path_info[:len(forum_index)] == forum_index
-
-
-def is_request_to_misago(request):
-    try:
-        return request._request_to_misago
-    except AttributeError:
-        request._request_to_misago = _is_request_path_under_misago(request)
-        return request._request_to_misago
 
 
 def is_referer_local(request):

@@ -1,18 +1,21 @@
-from django.db import transaction
-from django.http import Http404
-
 from rest_framework import viewsets
 from rest_framework.decorators import detail_route
 from rest_framework.response import Response
 
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
+from django.http import Http404
+from django.utils.translation import gettext as _
+
 from misago.acl import add_acl
 from misago.core.shortcuts import get_int_or_404
+from misago.threads.models import Poll
+from misago.threads.permissions import (
+    allow_delete_poll, allow_edit_poll, allow_see_poll_votes, allow_start_poll, can_start_poll)
+from misago.threads.serializers import (
+    EditPollSerializer, NewPollSerializer, PollSerializer, PollVoteSerializer)
+from misago.threads.viewmodels import ForumThread
 
-from ..models import Poll
-from ..permissions.polls import (
-    allow_see_poll_votes, allow_start_poll, allow_edit_poll, allow_delete_poll, can_start_poll)
-from ..serializers import PollSerializer, PollVoteSerializer, NewPollSerializer, EditPollSerializer
-from ..viewmodels.thread import ForumThread
 from .pollvotecreateendpoint import poll_vote_create
 
 
@@ -24,7 +27,7 @@ class ViewSet(viewsets.ViewSet):
             request,
             get_int_or_404(thread_pk),
             select_for_update=select_for_update,
-        ).model
+        ).unwrap()
 
     def get_thread_for_update(self, request, thread_pk):
         return self.get_thread(request, thread_pk, select_for_update=True)
@@ -49,6 +52,12 @@ class ViewSet(viewsets.ViewSet):
         thread = self.get_thread_for_update(request, thread_pk)
         allow_start_poll(request.user, thread)
 
+        try:
+            if thread.poll and thread.poll.pk:
+                raise PermissionDenied(_("There's already a poll in this thread."))
+        except Poll.DoesNotExist:
+            pass
+
         instance = Poll(
             thread=thread,
             category=thread.category,
@@ -63,6 +72,12 @@ class ViewSet(viewsets.ViewSet):
             serializer.save()
 
             add_acl(request.user, instance)
+            for choice in instance.choices:
+                choice['selected'] = False
+
+            thread.has_poll = True
+            thread.save()
+
             return Response(PollSerializer(instance).data)
         else:
             return Response(serializer.errors, status=400)
@@ -79,9 +94,9 @@ class ViewSet(viewsets.ViewSet):
             serializer.save()
 
             add_acl(request.user, instance)
-            serialized_poll = PollSerializer(instance).data
-            instance.make_choices_votes_aware(request.user, serialized_poll['choices'])
-            return Response(serialized_poll)
+            instance.make_choices_votes_aware(request.user)
+
+            return Response(PollSerializer(instance).data)
         else:
             return Response(serializer.errors, status=400)
 
@@ -94,8 +109,11 @@ class ViewSet(viewsets.ViewSet):
 
         thread.poll.delete()
 
+        thread.has_poll = False
+        thread.save()
+
         return Response({
-            'can_start_poll': can_start_poll(request.user, thread)
+            'can_start_poll': can_start_poll(request.user, thread),
         })
 
     @detail_route(methods=['get', 'post'])
@@ -134,7 +152,8 @@ class ViewSet(viewsets.ViewSet):
             choices.append(choice)
 
         queryset = thread.poll.pollvote_set.values(
-            'voter_id', 'voter_name', 'voter_slug', 'voted_on', 'choice_hash')
+            'voter_id', 'voter_name', 'voter_slug', 'voted_on', 'choice_hash'
+        )
 
         for voter in queryset.order_by('voter_name').iterator():
             voters[voter['choice_hash']].append(PollVoteSerializer(voter).data)

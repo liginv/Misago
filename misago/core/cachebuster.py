@@ -65,8 +65,7 @@ class CacheBusterController(object):
         from .models import CacheVersion
 
         self.cache[cache] += 1
-        CacheVersion.objects.filter(cache=cache).update(
-            version=F('version') + 1)
+        CacheVersion.objects.filter(cache=cache).update(version=F('version') + 1)
         default_cache.delete(CACHE_KEY)
 
     def invalidate_all(self):
@@ -81,24 +80,24 @@ _controller = CacheBusterController()
 
 
 # Expose controller API
-def register(cache):
-    _controller.register_cache(cache)
+def register(cache_name):
+    _controller.register_cache(cache_name)
 
 
-def unregister(cache):
-    _controller.unregister_cache(cache)
+def unregister(cache_name):
+    _controller.unregister_cache(cache_name)
 
 
-def get_version(cache):
-    return _controller.get_cache_version(cache)
+def get_version(cache_name):
+    return _controller.get_cache_version(cache_name)
 
 
-def is_valid(cache, version):
-    return _controller.is_cache_valid(cache, version)
+def is_valid(cache_name, version):
+    return _controller.is_cache_valid(cache_name, version)
 
 
-def invalidate(cache):
-    _controller.invalidate_cache(cache)
+def invalidate(cache_name):
+    _controller.invalidate_cache(cache_name)
 
 
 def invalidate_all():

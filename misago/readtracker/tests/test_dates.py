@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from ..dates import is_date_tracked
+from misago.readtracker.dates import is_date_tracked
 
 
 class MockUser(object):
@@ -28,9 +28,7 @@ class ReadTrackerDatesTests(TestCase):
         past_date = timezone.now() + timedelta(minutes=10)
 
         category_cutoff = timezone.now() + timedelta(minutes=20)
-        self.assertFalse(
-            is_date_tracked(past_date, MockUser(), category_cutoff))
+        self.assertFalse(is_date_tracked(past_date, MockUser(), category_cutoff))
 
         category_cutoff = timezone.now() - timedelta(minutes=20)
-        self.assertTrue(
-            is_date_tracked(past_date, MockUser(), category_cutoff))
+        self.assertTrue(is_date_tracked(past_date, MockUser(), category_cutoff))

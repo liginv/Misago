@@ -1,17 +1,18 @@
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from ...models import Online
+from misago.users.models import Online
+
+
+UserModel = get_user_model()
 
 
 class Command(BaseCommand):
     help = 'Populates online tracker for user accounts that lack it.'
 
     def handle(self, *args, **options):
-        User = get_user_model()
-
         entries_created = 0
-        queryset = User.objects.filter(online_tracker__isnull=True)
+        queryset = UserModel.objects.filter(online_tracker__isnull=True)
         for user in queryset.iterator():
             Online.objects.create(
                 user=user,

@@ -3,21 +3,13 @@
 
 
 {% block title %}
-{% if THREADS_ON_INDEX %}
+{% if THREADS_ON_INDEX and paginator.page == 1 %}
   {% if list_name %}
     {{ list_name }} | {{ block.super }}
-  {% elif paginator.page > 1 %}
-    {% if misago_settings.forum_index_title %}
-      {{ misago_settings.forum_index_title }} ({% blocktrans with page=paginator.page %}page: {{ page }}{% endblocktrans %})
-    {% else %}
-      {{ misago_settings.forum_name }} ({% blocktrans with page=paginator.page %}page: {{ page }}{% endblocktrans %})
-    {% endif %}
+  {% elif misago_settings.forum_index_title %}
+    {{ misago_settings.forum_index_title }}
   {% else %}
-    {% if misago_settings.forum_index_title %}
-      {{ misago_settings.forum_index_title }}
-    {% else %}
-      {{ misago_settings.forum_name }}
-    {% endif %}
+    {{ misago_settings.forum_name }}
   {% endif %}
 {% else %}
   {% if list_name %}
@@ -41,15 +33,23 @@
 {% block page-header %}
 <div class="page-header {{ user.is_authenticated|iftrue:"tabbed" }}">
   <div class="container">
-    {% if THREADS_ON_INDEX %}
-      {% if misago_settings.forum_index_title %}
-        <h1>{{ misago_settings.forum_index_title }}</h1>
-      {% else %}
-        <h1>{{ misago_settings.forum_name }}</h1>
-      {% endif %}
-    {% else %}
-      <h1>{% trans "Threads" %}</h1>
-    {% endif %}
+    <div class="row">
+      <div class="{{ user.is_authenticated|yesno:'col-md-8,col-xs-12' }}">
+        <div class="row">
+          <div class="col-xs-12">
+            {% if THREADS_ON_INDEX %}
+              {% if misago_settings.forum_index_title %}
+                <h1>{{ misago_settings.forum_index_title }}</h1>
+              {% else %}
+                <h1>{{ misago_settings.forum_name }}</h1>
+              {% endif %}
+            {% else %}
+              <h1>{% trans "Threads" %}</h1>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   {% if user.is_authenticated %}
     {% include "misago/threadslist/tabs.html" %}

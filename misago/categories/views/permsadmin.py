@@ -7,21 +7,22 @@ from misago.acl.forms import get_permissions_forms
 from misago.acl.models import Role
 from misago.acl.views import RoleAdmin, RolesList
 from misago.admin.views import generic
+from misago.categories.forms import (
+    CategoryRoleForm, CategoryRolesACLFormFactory, RoleCategoryACLFormFactory)
+from misago.categories.models import Category, CategoryRole, RoleCategoryACL
 
-from ..forms import CategoryRoleForm, CategoryRolesACLFormFactory, RoleCategoryACLFormFactory
-from ..models import Category, CategoryRole, RoleCategoryACL
 from .categoriesadmin import CategoriesList, CategoryAdmin
 
 
 class CategoryRoleAdmin(generic.AdminBaseMixin):
     root_link = 'misago:admin:permissions:categories:index'
-    Model = CategoryRole
+    model = CategoryRole
     templates_dir = 'misago/admin/categoryroles'
     message_404 = _("Requested role does not exist.")
 
 
 class CategoryRolesList(CategoryRoleAdmin, generic.ListView):
-    ordering = (('name', None),)
+    ordering = (('name', None), )
 
 
 class RoleFormMixin(object):
@@ -47,8 +48,7 @@ class RoleFormMixin(object):
                 form.instance.permissions = new_permissions
                 form.instance.save()
 
-                messages.success(
-                    request, self.message_submit % {'name': target.name})
+                messages.success(request, self.message_submit % {'name': target.name})
 
                 if 'stay' in request.POST:
                     return redirect(request.path)
@@ -63,7 +63,8 @@ class RoleFormMixin(object):
                 'form': form,
                 'target': target,
                 'perms_forms': perms_forms,
-            })
+            },
+        )
 
 
 class NewCategoryRole(RoleFormMixin, CategoryRoleAdmin, generic.ModelFormView):
@@ -77,8 +78,7 @@ class EditCategoryRole(RoleFormMixin, CategoryRoleAdmin, generic.ModelFormView):
 class DeleteCategoryRole(CategoryRoleAdmin, generic.ButtonView):
     def check_permissions(self, request, target):
         if target.special_role:
-            message = _('Role "%(name)s" is special '
-                        'role and can\'t be deleted.')
+            message = _('Role "%(name)s" is special role and can\'t be deleted.')
             return message % {'name': target.name}
 
     def button_action(self, request, target):
@@ -87,11 +87,8 @@ class DeleteCategoryRole(CategoryRoleAdmin, generic.ButtonView):
         messages.success(request, message % {'name': target.name})
 
 
-"""
-Create category roles view for assinging roles to category,
-add link to it in categories list
-"""
 class CategoryPermissions(CategoryAdmin, generic.ModelFormView):
+    """category roles view for assinging roles to category, add link to it in categories list"""
     templates_dir = 'misago/admin/categoryroles'
     template = 'categoryroles.html'
 
@@ -106,7 +103,8 @@ class CategoryPermissions(CategoryAdmin, generic.ModelFormView):
         forms_are_valid = True
         for role in Role.objects.order_by('name'):
             FormType = CategoryRolesACLFormFactory(
-                role, category_roles, assigned_roles.get(role.pk))
+                role, category_roles, assigned_roles.get(role.pk)
+            )
 
             if request.method == 'POST':
                 forms.append(FormType(request.POST, prefix=role.pk))
@@ -124,8 +122,9 @@ class CategoryPermissions(CategoryAdmin, generic.ModelFormView):
                         RoleCategoryACL(
                             role=form.role,
                             category=target,
-                            category_role=form.cleaned_data['category_role']
-                        ))
+                            category_role=form.cleaned_data['category_role'],
+                        )
+                    )
             if new_permissions:
                 RoleCategoryACL.objects.bulk_create(new_permissions)
 
@@ -143,19 +142,17 @@ class CategoryPermissions(CategoryAdmin, generic.ModelFormView):
             'target': target,
         })
 
+
 CategoriesList.add_item_action(
     name=_("Category permissions"),
     icon='fa fa-adjust',
     link='misago:admin:categories:nodes:permissions',
-    style='success'
+    style='success',
 )
 
 
-"""
-Create role categories view for assinging categories to role,
-add link to it in user roles list
-"""
 class RoleCategoriesACL(RoleAdmin, generic.ModelFormView):
+    """role categories view for assinging categories to role, add link to it in user roles list"""
     templates_dir = 'misago/admin/categoryroles'
     template = 'rolecategories.html'
 
@@ -175,9 +172,7 @@ class RoleCategoriesACL(RoleAdmin, generic.ModelFormView):
         forms_are_valid = True
         for category in categories:
             category.level_range = range(category.level - 1)
-            FormType = RoleCategoryACLFormFactory(category,
-                                               roles,
-                                               choices.get(category.pk))
+            FormType = RoleCategoryACLFormFactory(category, roles, choices.get(category.pk))
 
             if request.method == 'POST':
                 forms.append(FormType(request.POST, prefix=category.pk))
@@ -192,16 +187,18 @@ class RoleCategoriesACL(RoleAdmin, generic.ModelFormView):
             for form in forms:
                 if form.cleaned_data['role']:
                     new_permissions.append(
-                        RoleCategoryACL(role=target,
-                                     category=form.category,
-                                     category_role=form.cleaned_data['role']))
+                        RoleCategoryACL(
+                            role=target,
+                            category=form.category,
+                            category_role=form.cleaned_data['role'],
+                        )
+                    )
             if new_permissions:
                 RoleCategoryACL.objects.bulk_create(new_permissions)
 
             acl_version.invalidate()
 
-            message = _("Category permissions for role "
-                        "%(name)s have been changed.")
+            message = _("Category permissions for role %(name)s have been changed.")
             messages.success(request, message % {'name': target.name})
             if 'stay' in request.POST:
                 return redirect(request.path)
@@ -213,9 +210,10 @@ class RoleCategoriesACL(RoleAdmin, generic.ModelFormView):
             'target': target,
         })
 
+
 RolesList.add_item_action(
     name=_("Categories permissions"),
     icon='fa fa-comments-o',
     link='misago:admin:permissions:users:categories',
-    style='success'
+    style='success',
 )

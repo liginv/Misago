@@ -6,17 +6,16 @@ from django.utils.translation import ugettext as _
 from django.views.generic import View
 
 from misago.conf import settings
-
-from ..permissions.threads import exclude_invisible_posts
-from ..viewmodels.thread import ForumThread
+from misago.threads.permissions import exclude_invisible_posts
+from misago.threads.viewmodels import ForumThread, PrivateThread
 
 
 class GotoView(View):
     thread = None
-    read_aware=False
+    read_aware = False
 
     def get(self, request, pk, slug, **kwargs):
-        thread = self.get_thread(request, pk, slug).model
+        thread = self.get_thread(request, pk, slug).unwrap()
         self.test_permissions(request, thread)
 
         posts_queryset = exclude_invisible_posts(request.user, thread.category, thread.post_set)
@@ -36,19 +35,30 @@ class GotoView(View):
         raise NotImplementedError("goto views should define their own get_target_post method")
 
     def compute_post_page(self, target_post, posts_queryset):
+        # filter out events
+        posts_queryset = posts_queryset.filter(is_event=False)
+
         thread_len = posts_queryset.count()
         if thread_len <= settings.MISAGO_POSTS_PER_PAGE + settings.MISAGO_POSTS_TAIL:
-            return 1 # no chance for post to be on other page than only page
+            return 1  # no chance for post to be on other page than only page
 
         # compute total count of thread pages
-        thread_pages = thread_len // settings.MISAGO_POSTS_PER_PAGE
-        thread_tail = thread_len - thread_pages * settings.MISAGO_POSTS_PER_PAGE
-        if thread_tail > settings.MISAGO_POSTS_TAIL:
-            thread_pages += 1
+        hits = max(1, thread_len - settings.MISAGO_POSTS_TAIL)
+        hits += int(ceil(hits / float(settings.MISAGO_POSTS_PER_PAGE)))
+        thread_pages = int(ceil(hits / float(settings.MISAGO_POSTS_PER_PAGE)))
+
+        # is target an event?
+        if target_post.is_event:
+            target_event = target_post
+            previous_posts = posts_queryset.filter(pk__lt=target_event.pk)
+            target_post = previous_posts.order_by('id').last()
 
         # resolve post's page
         post_offset = posts_queryset.filter(pk__lte=target_post.pk).count()
-        post_page = int(ceil(float(post_offset) / settings.MISAGO_POSTS_PER_PAGE))
+        hits = max(1, post_offset)
+        hits += int(ceil(hits / float(settings.MISAGO_POSTS_PER_PAGE)))
+        post_page = int(ceil(hits / float(settings.MISAGO_POSTS_PER_PAGE)))
+
         if post_page > thread_pages:
             post_page = thread_pages
 
@@ -79,7 +89,9 @@ class ThreadGotoNewView(GotoView):
 
     def get_target_post(self, thread, posts_queryset, **kwargs):
         if thread.is_new:
-            return posts_queryset.filter(posted_on__gt=thread.last_read_on).order_by('id').first()
+            return posts_queryset.filter(
+                posted_on__gt=thread.last_read_on,
+            ).order_by('id').first()
         else:
             return posts_queryset.order_by('id').last()
 
@@ -90,11 +102,44 @@ class ThreadGotoUnapprovedView(GotoView):
     def test_permissions(self, request, thread):
         if not thread.acl['can_approve']:
             raise PermissionDenied(
-                _("You need permission to approve content to be able to go to first unapproved post."))
+                _(
+                    "You need permission to approve content to "
+                    "be able to go to first unapproved post."
+                )
+            )
 
     def get_target_post(self, thread, posts_queryset, **kwargs):
-        unapproved_post = posts_queryset.filter(is_unapproved=True).order_by('id').first()
+        unapproved_post = posts_queryset.filter(
+            is_unapproved=True,
+        ).order_by('id').first()
         if unapproved_post:
             return unapproved_post
+        else:
+            return posts_queryset.order_by('id').last()
+
+
+class PrivateThreadGotoPostView(GotoView):
+    thread = PrivateThread
+
+    def get_target_post(self, thread, posts_queryset, **kwargs):
+        return get_object_or_404(posts_queryset, pk=kwargs['post'])
+
+
+class PrivateThreadGotoLastView(GotoView):
+    thread = PrivateThread
+
+    def get_target_post(self, thread, posts_queryset, **kwargs):
+        return posts_queryset.order_by('id').last()
+
+
+class PrivateThreadGotoNewView(GotoView):
+    thread = PrivateThread
+    read_aware = True
+
+    def get_target_post(self, thread, posts_queryset, **kwargs):
+        if thread.is_new:
+            return posts_queryset.filter(
+                posted_on__gt=thread.last_read_on,
+            ).order_by('id').first()
         else:
             return posts_queryset.order_by('id').last()

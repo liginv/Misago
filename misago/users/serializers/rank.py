@@ -1,8 +1,7 @@
 from rest_framework import serializers
 
 from misago.core.utils import format_plaintext_for_html
-
-from ..models import Rank
+from misago.users.models import Rank
 
 
 __all__ = ['RankSerializer']
@@ -14,7 +13,7 @@ class RankSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rank
-        fields = (
+        fields = [
             'id',
             'name',
             'slug',
@@ -24,7 +23,7 @@ class RankSerializer(serializers.ModelSerializer):
             'is_default',
             'is_tab',
             'absolute_url',
-        )
+        ]
 
     def get_description(self, obj):
         if obj.description:

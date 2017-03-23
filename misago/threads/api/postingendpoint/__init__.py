@@ -1,7 +1,6 @@
-from importlib import import_module
-
 from django.core.exceptions import PermissionDenied
 from django.utils import timezone
+from django.utils.module_loading import import_string
 
 from misago.conf import settings
 
@@ -20,11 +19,7 @@ class PostingEndpoint(object):
 
     def __init__(self, request, mode, **kwargs):
         self.kwargs = kwargs
-        self.kwargs.update({
-            'mode': mode,
-            'request': request,
-            'user': request.user
-        })
+        self.kwargs.update({'mode': mode, 'request': request, 'user': request.user})
 
         self.__dict__.update(kwargs)
 
@@ -60,11 +55,7 @@ class PostingEndpoint(object):
 
         middlewares = []
         for middleware in settings.MISAGO_POSTING_MIDDLEWARES:
-            module_name = '.'.join(middleware.split('.')[:-1])
-            class_name = middleware.split('.')[-1]
-
-            middleware_module = import_module(module_name)
-            middleware_class = getattr(middleware_module, class_name)
+            middleware_class = import_string(middleware)
 
             try:
                 middleware_obj = middleware_class(prefix=middleware, **kwargs)
@@ -102,13 +93,17 @@ class PostingEndpoint(object):
     def save(self):
         """save new state to backend"""
         if not self._is_validated or self.errors:
-            raise RuntimeError("You need to validate posting data successfully before calling save")
+            raise RuntimeError(
+                "You need to validate posting data successfully before calling save"
+            )
 
         try:
             for middleware, obj in self.middlewares:
                 obj.pre_save(self._serializers.get(middleware))
         except PostingInterrupt as e:
-            raise ValueError("Posting process can only be interrupted from within interrupt_posting method")
+            raise ValueError(
+                "Posting process can only be interrupted from within interrupt_posting method"
+            )
 
         try:
             for middleware, obj in self.middlewares:
@@ -122,13 +117,14 @@ class PostingEndpoint(object):
             for middleware, obj in self.middlewares:
                 obj.post_save(self._serializers.get(middleware))
         except PostingInterrupt as e:
-            raise ValueError("Posting process can only be interrupted from within interrupt_posting method")
+            raise ValueError(
+                "Posting process can only be interrupted from within interrupt_posting method"
+            )
 
 
 class PostingMiddleware(object):
-    """
-    Abstract middleware class
-    """
+    """abstract middleware class"""
+
     def __init__(self, **kwargs):
         self.kwargs = kwargs
         self.__dict__.update(kwargs)

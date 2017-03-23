@@ -1,6 +1,6 @@
 import React from 'react';
 import Button from 'misago/components/button'; // jshint ignore:line
-import Search from 'misago/components/search'; // jshint ignore:line
+import Search from 'misago/components/quick-search'; // jshint ignore:line
 import UsersList from 'misago/components/users-list/root'; // jshint ignore:line
 import misago from 'misago/index';
 import { hydrate, append } from 'misago/reducers/users'; // jshint ignore:line
@@ -63,9 +63,10 @@ export default class extends React.Component {
   }
 
   loadUsers(page=1, search=null) {
-    ajax.get(misago.get('USERS_API'), {
-      [this.API_FILTER]: this.props.profile.id,
-      name: search,
+    const apiUrl = this.props.profile.api_url[this.API_FILTER];
+
+    ajax.get(apiUrl, {
+      search: search,
       page: page || 1
     }, 'user-' + this.API_FILTER).then((data) => {
       if (page === 1) {
@@ -223,7 +224,7 @@ export default class extends React.Component {
         <Search className="toolbar-right"
                 value={this.state.search}
                 onChange={this.search}
-                placeholder={gettext("Search history...")} />
+                placeholder={gettext("Search users...")} />
       </nav>
 
       {this.getListBody()}

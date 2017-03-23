@@ -1,15 +1,13 @@
+from django import forms
 from django.utils.translation import ugettext_lazy as _
 
 from misago.acl import algebra
 from misago.acl.models import Role
-from misago.core import forms
+from misago.core.forms import YesNoSwitch
+from misago.threads.models import Attachment
 
-from ..models import Attachment
 
-
-"""
-Admin Permissions Form
-"""
+# Admin Permissions Forms
 class PermissionsForm(forms.Form):
     legend = _("Attachments")
 
@@ -20,14 +18,16 @@ class PermissionsForm(forms.Form):
         min_value=0
     )
 
-    can_download_other_users_attachments = forms.YesNoSwitch(label=_("Can download other users attachments"))
-    can_delete_other_users_attachments = forms.YesNoSwitch(label=_("Can delete other users attachments"))
+    can_download_other_users_attachments = YesNoSwitch(
+        label=_("Can download other users attachments")
+    )
+    can_delete_other_users_attachments = YesNoSwitch(label=_("Can delete other users attachments"))
 
 
 class AnonymousPermissionsForm(forms.Form):
     legend = _("Attachments")
 
-    can_download_other_users_attachments = forms.YesNoSwitch(label=_("Can download attachments"))
+    can_download_other_users_attachments = YesNoSwitch(label=_("Can download attachments"))
 
 
 def change_permissions_form(role):
@@ -40,9 +40,6 @@ def change_permissions_form(role):
         return None
 
 
-"""
-ACL Builder
-"""
 def build_acl(acl, roles, key_name):
     new_acl = {
         'max_attachment_size': 0,
@@ -51,24 +48,25 @@ def build_acl(acl, roles, key_name):
     }
     new_acl.update(acl)
 
-    return algebra.sum_acls(new_acl, roles=roles, key=key_name,
+    return algebra.sum_acls(
+        new_acl,
+        roles=roles,
+        key=key_name,
         max_attachment_size=algebra.greater,
         can_download_other_users_attachments=algebra.greater,
-        can_delete_other_users_attachments=algebra.greater
+        can_delete_other_users_attachments=algebra.greater,
     )
 
 
-"""
-ACL's for targets
-"""
 def add_acl_to_attachment(user, attachment):
-    if user.is_authenticated() and user.id == attachment.uploader_id:
+    if user.is_authenticated and user.id == attachment.uploader_id:
         attachment.acl.update({
             'can_delete': True,
         })
     else:
+        user_can_delete = user.acl_cache['can_delete_other_users_attachments']
         attachment.acl.update({
-            'can_delete': user.is_authenticated() and user.acl['can_delete_other_users_attachments'],
+            'can_delete': user.is_authenticated and user_can_delete,
         })
 
 

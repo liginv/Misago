@@ -15,8 +15,7 @@ def login(request):
     if request.method == 'POST':
         redirect_to = request.POST.get('redirect_to')
         if redirect_to:
-            is_redirect_safe = is_safe_url(
-                url=redirect_to, host=request.get_host())
+            is_redirect_safe = is_safe_url(url=redirect_to, host=request.get_host())
             if is_redirect_safe:
                 redirect_to_path = urlparse(redirect_to).path
                 return redirect(redirect_to_path)
@@ -27,6 +26,6 @@ def login(request):
 @never_cache
 @csrf_protect
 def logout(request):
-    if request.method == 'POST' and request.user.is_authenticated():
+    if request.method == 'POST' and request.user.is_authenticated:
         auth.logout(request)
     return redirect(settings.LOGIN_REDIRECT_URL)

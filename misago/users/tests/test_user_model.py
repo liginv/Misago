@@ -1,14 +1,19 @@
+# -*- coding: utf-8 -*-
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from ..models import User
+from misago.users.models import User
 
 
 class UserManagerTests(TestCase):
     def test_create_user(self):
         """create_user created new user account successfully"""
-        user = User.objects.create_user('Bob', 'bob@test.com', 'Pass.123',
-                                        set_default_avatar=True)
+        user = User.objects.create_user(
+            'Bob',
+            'bob@test.com',
+            'Pass.123',
+            set_default_avatar=True,
+        )
 
         db_user = User.objects.get(id=user.pk)
 
@@ -49,6 +54,17 @@ class UserManagerTests(TestCase):
 
         db_user = User.objects.get_by_username_or_email(user.email)
         self.assertEqual(user.pk, db_user.pk)
+
+    def test_getters_unicode_handling(self):
+        """get_by_ methods handle unicode"""
+        with self.assertRaises(User.DoesNotExist):
+            User.objects.get_by_username(u'łóć')
+
+        with self.assertRaises(User.DoesNotExist):
+            User.objects.get_by_email(u'łóć@polskimail.pl')
+
+        with self.assertRaises(User.DoesNotExist):
+            User.objects.get_by_username_or_email(u'łóć@polskimail.pl')
 
 
 class UserModelTests(TestCase):

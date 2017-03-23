@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from .. import algebra
+from misago.acl import algebra
 
 
 class ComparisionsTests(TestCase):
@@ -27,7 +27,6 @@ class ComparisionsTests(TestCase):
         self.assertEqual(algebra.lower(4, 2), 2)
         self.assertEqual(algebra.lower(2, 2), 2)
         self.assertEqual(algebra.lower(True, False), False)
-
 
     def test_lower_non_zero(self):
         """lower non-zero wins test"""
@@ -73,13 +72,14 @@ class SumACLTests(TestCase):
         }
 
         acl = algebra.sum_acls(
-            defaults, acls=test_acls,
+            defaults,
+            acls=test_acls,
             can_see=algebra.greater,
             can_hear=algebra.greater,
             max_speed=algebra.greater,
             min_age=algebra.lower,
-            speed_limit=algebra.greater_or_zero
-            )
+            speed_limit=algebra.greater_or_zero,
+        )
 
         self.assertEqual(acl['can_see'], 1)
         self.assertEqual(acl['can_hear'], 1)

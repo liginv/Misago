@@ -1,38 +1,35 @@
-from django.core.urlresolvers import reverse
-
 from rest_framework import serializers
 
+from django.urls import reverse
+
+from misago.core.serializers import MutableFields
 from misago.core.utils import format_plaintext_for_html
 
 from .models import Category
 
 
-__all__ = [
-    'BasicCategorySerializer',
-    'IndexCategorySerializer',
-    'CategorySerializer',
-]
+__all__ = ['CategorySerializer']
 
 
 def last_activity_detail(f):
     """util for serializing last activity details"""
+
     def decorator(self, obj):
         if not obj.last_thread_id:
             return None
 
         acl = self.get_acl(obj)
-        if not all((
-                    acl.get('can_see'),
-                    acl.get('can_browse'),
-                    acl.get('can_see_all_threads')
-                )):
+        tested_acls = (acl.get('can_see'), acl.get('can_browse'), acl.get('can_see_all_threads'), )
+
+        if not all(tested_acls):
             return None
 
         return f(self, obj)
+
     return decorator
 
 
-class CategorySerializer(serializers.ModelSerializer):
+class CategorySerializer(serializers.ModelSerializer, MutableFields):
     parent = serializers.PrimaryKeyRelatedField(read_only=True)
     description = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
@@ -46,7 +43,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Category
-        fields = (
+        fields = [
             'id',
             'parent',
             'name',
@@ -69,7 +66,7 @@ class CategorySerializer(serializers.ModelSerializer):
             'level',
             'lft',
             'rght',
-        )
+        ]
 
     def get_description(self, obj):
         if obj.description:
@@ -106,10 +103,12 @@ class CategorySerializer(serializers.ModelSerializer):
     @last_activity_detail
     def get_last_poster_url(self, obj):
         if obj.last_poster_id:
-            return reverse('misago:user', kwargs={
-                'slug': obj.last_poster_slug,
-                'pk': obj.last_poster_id,
-            })
+            return reverse(
+                'misago:user', kwargs={
+                    'slug': obj.last_poster_slug,
+                    'pk': obj.last_poster_id,
+                }
+            )
         else:
             return None
 
@@ -123,22 +122,3 @@ class CategorySerializer(serializers.ModelSerializer):
         return {
             'read': obj.get_read_api_url(),
         }
-
-
-class BasicCategorySerializer(CategorySerializer):
-    class Meta:
-        model = Category
-        fields = (
-            'id',
-            'parent',
-            'name',
-            'description',
-            'is_closed',
-            'css_class',
-            'absolute_url',
-            'api_url',
-            'level',
-            'lft',
-            'rght',
-            'is_read',
-        )

@@ -1,13 +1,12 @@
-from django.db import IntegrityError
-from django.utils.translation import ugettext as _
-
 from rest_framework import status
 from rest_framework.response import Response
 
-from misago.conf import settings
+from django.db import IntegrityError
+from django.utils.translation import ugettext as _
 
-from ...forms.rename import ChangeUsernameForm
-from ...namechanges import UsernameChanges
+from misago.conf import settings
+from misago.users.namechanges import UsernameChanges
+from misago.users.serializers import ChangeUsernameSerializer
 
 
 def username_endpoint(request):
@@ -40,12 +39,13 @@ def change_username(request):
             'detail': _("You can't change your username now."),
             'options': options
         },
-        status=status.HTTP_400_BAD_REQUEST)
+                        status=status.HTTP_400_BAD_REQUEST)
 
-    form = ChangeUsernameForm(request.data, user=request.user)
-    if form.is_valid():
+    serializer = ChangeUsernameSerializer(data=request.data, context={'user': request.user})
+
+    if serializer.is_valid():
         try:
-            form.change_username(changed_by=request.user)
+            serializer.change_username(changed_by=request.user)
             return Response({
                 'username': request.user.username,
                 'slug': request.user.slug,
@@ -54,20 +54,22 @@ def change_username(request):
         except IntegrityError:
             return Response({
                 'detail': _("Error changing username. Please try again."),
-                'options': options
             },
-            status=status.HTTP_400_BAD_REQUEST)
+                            status=status.HTTP_400_BAD_REQUEST)
     else:
-        return Response({'detail': form.non_field_errors()[0]},
+        return Response({
+            'detail': serializer.errors['non_field_errors'][0]
+        },
                         status=status.HTTP_400_BAD_REQUEST)
 
 
 def moderate_username_endpoint(request, profile):
     if request.method == 'POST':
-        form = ChangeUsernameForm(request.data, user=profile)
-        if form.is_valid():
+        serializer = ChangeUsernameSerializer(data=request.data, context={'user': profile})
+
+        if serializer.is_valid():
             try:
-                form.change_username(changed_by=request.user)
+                serializer.change_username(changed_by=request.user)
                 return Response({
                     'username': profile.username,
                     'slug': profile.slug,
@@ -75,11 +77,12 @@ def moderate_username_endpoint(request, profile):
             except IntegrityError:
                 return Response({
                     'detail': _("Error changing username. Please try again."),
-                    'options': options
                 },
-                status=status.HTTP_400_BAD_REQUEST)
+                                status=status.HTTP_400_BAD_REQUEST)
         else:
-            return Response({'detail': form.non_field_errors()[0]},
+            return Response({
+                'detail': serializer.errors['non_field_errors'][0]
+            },
                             status=status.HTTP_400_BAD_REQUEST)
     else:
         return Response({

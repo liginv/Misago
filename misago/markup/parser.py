@@ -1,13 +1,16 @@
 from __future__ import unicode_literals
 
-import markdown
+import warnings
 
 import bleach
+import markdown
 from bs4 import BeautifulSoup
-from django.core.urlresolvers import resolve
-from django.http import Http404
-from django.utils import six
 from htmlmin.minify import html_minify
+from markdown.extensions.fenced_code import FencedCodeExtension
+
+from django.http import Http404
+from django.urls import resolve
+from django.utils import six
 
 from .bbcode import blocks, inline
 from .md.shortimgs import ShortImagesExtension
@@ -16,14 +19,20 @@ from .mentions import add_mentions
 from .pipeline import pipeline
 
 
-__all__ = ['parse']
-
 MISAGO_ATTACHMENT_VIEWS = ('misago:attachment', 'misago:attachment-thumbnail')
 
 
-
-def parse(text, request, poster, allow_mentions=True, allow_links=True,
-          allow_images=True, allow_blocks=True, force_shva=False, minify=True):
+def parse(
+        text,
+        request,
+        poster,
+        allow_mentions=True,
+        allow_links=True,
+        allow_images=True,
+        allow_blocks=True,
+        force_shva=False,
+        minify=True
+):
     """
     Message parser
 
@@ -46,8 +55,8 @@ def parse(text, request, poster, allow_mentions=True, allow_links=True,
         'markdown': md,
         'mentions': [],
         'images': [],
+        'internal_links': [],
         'outgoing_links': [],
-        'inside_links': []
     }
 
     # Parse text
@@ -73,9 +82,7 @@ def parse(text, request, poster, allow_mentions=True, allow_links=True,
 
 
 def md_factory(allow_links=True, allow_images=True, allow_blocks=True):
-    """
-    Create and configure markdown object
-    """
+    """creates and configures markdown object"""
     md = markdown.Markdown(safe_mode='escape', extensions=['nl2br'])
 
     # Remove references
@@ -93,7 +100,10 @@ def md_factory(allow_links=True, allow_images=True, allow_blocks=True):
     striketrough_md = StriketroughExtension()
     striketrough_md.extendMarkdown(md)
 
-    if not allow_links:
+    if allow_links:
+        # Add [url]
+        md.inlinePatterns.add('bb_url', inline.url(md), '<link')
+    else:
         # Remove links
         del md.inlinePatterns['link']
         del md.inlinePatterns['autolink']
@@ -101,6 +111,7 @@ def md_factory(allow_links=True, allow_images=True, allow_blocks=True):
 
     if allow_images:
         # Add [img]
+        md.inlinePatterns.add('bb_img', inline.image(md), '<image_link')
         short_images_md = ShortImagesExtension()
         short_images_md.extendMarkdown(md)
     else:
@@ -110,6 +121,12 @@ def md_factory(allow_links=True, allow_images=True, allow_blocks=True):
     if allow_blocks:
         # Add [hr] and [quote] blocks
         md.parser.blockprocessors.add('bb_hr', blocks.BBCodeHRProcessor(md.parser), '>hr')
+
+        fenced_code = FencedCodeExtension()
+        fenced_code.extendMarkdown(md, None)
+
+        code_bbcode = blocks.CodeBlockExtension()
+        code_bbcode.extendMarkdown(md)
 
         quote_bbcode = blocks.QuoteExtension()
         quote_bbcode.extendMarkdown(md)
@@ -129,19 +146,30 @@ def md_factory(allow_links=True, allow_images=True, allow_blocks=True):
 def linkify_paragraphs(result):
     result['parsed_text'] = bleach.linkify(result['parsed_text'], skip_pre=True, parse_email=True)
 
+    # dirty fix for
+    if '<code>' in result['parsed_text'] and '<a' in result['parsed_text']:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            soup = BeautifulSoup(result['parsed_text'], 'html5lib')
+            for link in soup.select('code > a'):
+                link.replace_with(BeautifulSoup(link.string, 'html.parser'))
+            # [6:-7] trims <body></body> wrap
+            result['parsed_text'] = six.text_type(soup.body)[6:-7]
+
 
 def clean_links(request, result, force_shva=False):
     host = request.get_host()
-    site_address = '%s://%s' % (request.scheme, request.get_host())
 
     soup = BeautifulSoup(result['parsed_text'], 'html5lib')
     for link in soup.find_all('a'):
         if is_internal_link(link['href'], host):
             link['href'] = clean_internal_link(link['href'], host)
-            result['inside_links'].append(link['href'])
+            result['internal_links'].append(link['href'])
             link['href'] = clean_attachment_link(link['href'], force_shva)
         else:
-            result['outgoing_links'].append(link['href'])
+            result['outgoing_links'].append(clean_link_prefix(link['href']))
+            link['href'] = assert_link_prefix(link['href'])
 
         if link.string:
             link.string = clean_link_prefix(link.string)
@@ -153,7 +181,8 @@ def clean_links(request, result, force_shva=False):
             result['images'].append(img['src'])
             img['src'] = clean_attachment_link(img['src'], force_shva)
         else:
-            result['images'].append(img['src'])
+            result['images'].append(clean_link_prefix(img['src']))
+            img['src'] = assert_link_prefix(img['src'])
 
     # [6:-7] trims <body></body> wrap
     result['parsed_text'] = six.text_type(soup.body)[6:-7]
@@ -175,6 +204,17 @@ def clean_link_prefix(link):
     if link.startswith('//'):
         link = link[2:]
     return link
+
+
+def assert_link_prefix(link):
+    if link.lower().startswith('https:'):
+        return link
+    if link.lower().startswith('http:'):
+        return link
+    if link.startswith('//'):
+        return 'http:{}'.format(link)
+
+    return 'http://{}'.format(link)
 
 
 def clean_internal_link(link, host):

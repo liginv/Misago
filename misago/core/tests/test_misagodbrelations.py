@@ -1,7 +1,8 @@
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils.six import StringIO
 
-from ..management.commands import misagodbrelations
+from misago.core.management.commands import misagodbrelations
 
 
 class MisagoDBRelationsTests(TestCase):
@@ -9,4 +10,4 @@ class MisagoDBRelationsTests(TestCase):
         """command raises no errors during execution"""
         command = misagodbrelations.Command()
 
-        command.execute(stdout=StringIO())
+        call_command(command, stdout=StringIO())
